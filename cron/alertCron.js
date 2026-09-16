@@ -166,8 +166,7 @@ export const initAlertCron = () => {
 
       const dueAlerts = await Alert.find({
         isActive: true,
-        scheduledDateTime: { $lte: now },
-        fcmToken: { $ne: null }
+        scheduledDateTime: { $lte: now }
       });
 
       for (const alert of dueAlerts) {
@@ -221,6 +220,13 @@ export const initAlertCron = () => {
           else if (alert.repeatFrequency === "monthly") {
             const nextDate = new Date(alert.scheduledDateTime);
             nextDate.setMonth(nextDate.getMonth() + 1);
+            nextScheduledTime = nextDate;
+            alert.scheduledDateTime = nextDate;
+            alert.date = nextDate;
+          }
+          else if (alert.repeatFrequency === "yearly") {
+            const nextDate = new Date(alert.scheduledDateTime);
+            nextDate.setFullYear(nextDate.getFullYear() + 1);
             nextScheduledTime = nextDate;
             alert.scheduledDateTime = nextDate;
             alert.date = nextDate;
