@@ -280,6 +280,9 @@ export const initAlertCron = () => {
 
               repeatFrequency: alert.repeatFrequency || "none",
               repeatDaily: String(alert.repeatDaily || false),
+              repeatMetadata: typeof alert.repeatMetadata === 'object' ? JSON.stringify(alert.repeatMetadata) : String(alert.repeatMetadata || ""),
+              customRepeatMinutes: String(alert.repeatMetadata?.customIntervalMinutes || alert.customIntervalMinutes || alert.customRepeatMinutes || alert.repeatInterval || ""),
+              customIntervalMinutes: String(alert.repeatMetadata?.customIntervalMinutes || alert.customIntervalMinutes || alert.customRepeatMinutes || alert.repeatInterval || ""),
 
               category: alert.category || "alert",
 
