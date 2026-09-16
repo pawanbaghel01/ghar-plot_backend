@@ -497,11 +497,12 @@ export const createAlert = async (req, res) => {
       
       finalTime = time;
       
-      // Construct a Date object in system local time
+      // Construct a Date object in IST timezone converted to UTC
       const [year, month, day] = finalDate.split('-').map(Number);
       const [hours, minutes] = finalTime.split(':').map(Number);
-      calculatedScheduledDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
-      console.log(`📅 [CreateAlert] date=${date}, time=${time} → Local/IST: ${calculatedScheduledDateTime.toString()}`);
+      const istOffsetMs = 5.5 * 60 * 60 * 1000;
+      calculatedScheduledDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0) - istOffsetMs);
+      console.log(`📅 [CreateAlert] date=${date}, time=${time} → UTC: ${calculatedScheduledDateTime.toISOString()}`);
     }
 
     // Create new alert
@@ -856,43 +857,78 @@ export const getAlerts = async (req, res) => {
         let nextScheduledAt = null;
 
         if (alert.isActive) {
-          // Build next occurrence using date + time in IST timezone
-          // Parse time parts
-          let hours = 0;
-          let minutes = 0;
+          // Compute true base UTC time from IST date + time (immune to server timezone)
+          let baseMs = null;
           if (alert.time) {
             const parts = alert.time.split(":").map(Number);
-            hours = parts[0] || 0;
-            minutes = parts[1] || 0;
+            const hours = parts[0] || 0;
+            const minutes = parts[1] || 0;
+            let year, month, day;
+            if (alert.date) {
+              const d = new Date(alert.date);
+              year = d.getUTCFullYear();
+              month = d.getUTCMonth();
+              day = d.getUTCDate();
+            } else {
+              const nowIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+              year = nowIST.getUTCFullYear();
+              month = nowIST.getUTCMonth();
+              day = nowIST.getUTCDate();
+            }
+            const istOffsetMs = 5.5 * 60 * 60 * 1000;
+            baseMs = Date.UTC(year, month, day, hours, minutes, 0, 0) - istOffsetMs;
+          } else if (alert.scheduledDateTime) {
+            baseMs = new Date(alert.scheduledDateTime).getTime();
           }
 
-          // Build date in local IST
-          const alertDateObj = new Date(alert.date);
-          let next = new Date(
-            alertDateObj.getFullYear(),
-            alertDateObj.getMonth(),
-            alertDateObj.getDate(),
-            hours,
-            minutes,
-            0,
-            0
-          );
+          if (baseMs) {
+            const nowMs = now.getTime();
+            const freq = alert.repeatFrequency || (alert.repeatDaily ? "daily" : "none");
+            const customMins = parseInt(
+              alert.repeatMetadata?.customIntervalMinutes ||
+              alert.customIntervalMinutes ||
+              alert.customRepeatMinutes ||
+              alert.repeatInterval ||
+              0
+            );
 
-          if (next <= now) {
-            if (alert.repeatFrequency === "daily" || alert.repeatDaily) {
-              while (next <= now) {
-                next.setDate(next.getDate() + 1);
-              }
-            } else if (alert.repeatFrequency === "hourly") {
-              while (next <= now) {
-                next.setHours(next.getHours() + 1);
-              }
+            if (baseMs > nowMs) {
+              nextScheduledAt = new Date(baseMs).toISOString();
             } else {
-              next = null;
+              if (freq === "daily" || (alert.repeatDaily && freq === "none")) {
+                let next = new Date(baseMs);
+                while (next.getTime() <= nowMs) {
+                  next = new Date(next.getTime() + 24 * 60 * 60 * 1000);
+                }
+                nextScheduledAt = next.toISOString();
+              } else if ((freq === "custom" || customMins > 0) && customMins > 0) {
+                const intervalMs = customMins * 60 * 1000;
+                let next = new Date(baseMs);
+                while (next.getTime() <= nowMs) {
+                  next = new Date(next.getTime() + intervalMs);
+                }
+                nextScheduledAt = next.toISOString();
+              } else if (freq === "hourly") {
+                let next = new Date(baseMs);
+                while (next.getTime() <= nowMs) {
+                  next = new Date(next.getTime() + 60 * 60 * 1000);
+                }
+                nextScheduledAt = next.toISOString();
+              } else if (freq === "weekly") {
+                let next = new Date(baseMs);
+                while (next.getTime() <= nowMs) {
+                  next = new Date(next.getTime() + 7 * 24 * 60 * 60 * 1000);
+                }
+                nextScheduledAt = next.toISOString();
+              } else if (freq === "monthly") {
+                let next = new Date(baseMs);
+                while (next.getTime() <= nowMs) {
+                  next.setMonth(next.getMonth() + 1);
+                }
+                nextScheduledAt = next.toISOString();
+              }
             }
           }
-
-          nextScheduledAt = next ? next.toISOString() : null;
         }
 
         return {
@@ -1211,11 +1247,11 @@ export const editAlert = async (req, res) => {
           ? time
           : alert.time;
 
-      // Construct a Date object in system local time, then convert to Date object
+      // Construct Date object in IST timezone converted to UTC
       const [year, month, day] = finalDate.split('-').map(Number);
       const [hours, minutes] = finalTime.split(':').map(Number);
-      // Construct local time Date object, then set as scheduledDateTime
-      calculatedScheduledDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      const istOffsetMs = 5.5 * 60 * 60 * 1000;
+      calculatedScheduledDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0) - istOffsetMs);
     }
 
     alert.scheduledDateTime = calculatedScheduledDateTime;
