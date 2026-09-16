@@ -1,0 +1,1085 @@
+================================================================================
+USP EMPLOYEE API - CURL COMMANDS FOR TESTING
+================================================================================
+Base URL: https://abc.bhoomitechzone.us
+
+================================================================================
+CATEGORY ENDPOINTS
+================================================================================
+
+1. CREATE CATEGORY
+------------------
+Purpose: Creates a new USP category for organizing employees by expertise area
+Method: POST
+Endpoint: /api/usp-categories
+
+curl -X POST https://abc.bhoomitechzone.us/api/usp-categories \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Real Estate Experts",
+    "description": "Specialized in property sales and rentals"
+  }'
+
+What it does:
+- Creates a new category with the specified name and description
+- Name must be unique (no duplicate category names allowed)
+- Returns the created category with auto-generated _id, timestamps, and isActive status
+- This category can then be used to group employees with similar expertise
+
+
+2. GET ALL CATEGORIES
+---------------------
+Purpose: Retrieves all active categories in the system
+Method: GET
+Endpoint: /api/usp-categories
+
+curl -X GET https://abc.bhoomitechzone.us/api/usp-categories
+
+What it does:
+- Fetches all categories where isActive = true
+- Returns categories sorted alphabetically by name
+- Shows count of total categories
+- Use this to see available categories before adding employees
+
+
+3. GET SINGLE CATEGORY BY ID
+-----------------------------
+Purpose: Retrieves details of a specific category
+Method: GET
+Endpoint: /api/usp-categories/:id
+
+curl -X GET https://abc.bhoomitechzone.us/api/usp-categories/CATEGORY_ID_HERE
+
+What it does:
+- Fetches one category by its MongoDB _id
+- Returns full category details including name, description, status, and timestamps
+- Returns 404 error if category doesn't exist
+- Replace CATEGORY_ID_HERE with actual category ID
+
+
+4. UPDATE CATEGORY
+------------------
+Purpose: Updates an existing category's information
+Method: PUT
+Endpoint: /api/usp-categories/:id
+
+curl -X PUT https://abc.bhoomitechzone.us/api/usp-categories/CATEGORY_ID_HERE \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Category Name",
+    "description": "Updated description",
+    "isActive": true
+  }'
+
+What it does:
+- Updates category name, description, or active status
+- Validates that new name doesn't conflict with existing categories
+- All fields are optional - only send what you want to update
+- Returns updated category data
+- Replace CATEGORY_ID_HERE with actual category ID
+
+
+5. DELETE CATEGORY
+------------------
+Purpose: Permanently removes a category from the system
+Method: DELETE
+Endpoint: /api/usp-categories/:id
+
+curl -X DELETE https://abc.bhoomitechzone.us/api/usp-categories/CATEGORY_ID_HERE
+
+What it does:
+- Permanently deletes the category from database
+- WARNING: This is a hard delete, not just deactivation
+- Returns success message upon deletion
+- Returns 404 if category doesn't exist
+- Replace CATEGORY_ID_HERE with actual category ID
+
+
+================================================================================
+USP EMPLOYEE ENDPOINTS
+================================================================================
+
+6. ADD EMPLOYEE BY EMPLOYEE ID (SYSTEM EMPLOYEE)
+-------------------------------------------------
+Purpose: Links an existing employee from your system to a USP category
+Method: POST
+Endpoint: /api/usp-employees/add-by-id
+
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-by-id \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employeeId": "EMPLOYEE_ID_HERE",
+    "categoryId": "CATEGORY_ID_HERE",
+    "expertise": "Commercial Real Estate",
+    "experienceYears": 5,
+    "description": "Expert in commercial property sales"
+  }'
+
+What it does:
+- Links an existing employee (from Employee collection) to a USP category
+- Validates that both employee and category exist in database
+- Prevents duplicate entries (same employee can't be added to same category twice)
+- Sets employeeType as "system" automatically
+- Returns populated data with employee details (name, email, phone) and category info
+- Replace EMPLOYEE_ID_HERE with actual employee _id from your Employee collection
+- Replace CATEGORY_ID_HERE with category _id from step 1
+
+
+7. ADD EMPLOYEE MANUALLY (NAME, PHONE, CATEGORY)
+-------------------------------------------------
+Purpose: Adds an employee to a category without needing existing employee record
+Method: POST
+Endpoint: /api/usp-employees/add-manually
+
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-manually \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "CATEGORY_ID_HERE",
+    "name": "John Doe",
+    "phone": "+1234567890",
+    "expertise": "Residential Properties",
+    "experienceYears": 3,
+    "description": "Specializes in luxury homes"
+  }'
+
+What it does:
+- Creates a USP employee entry with manual name and phone (no link to Employee collection)
+- Useful for adding external consultants or contractors not in your employee system
+- Sets employeeType as "manual" automatically
+- Requires: categoryId, name, and phone (all other fields optional)
+- Returns created entry with category details populated
+- Replace CATEGORY_ID_HERE with actual category ID
+
+
+8. GET ALL USP EMPLOYEES
+------------------------
+Purpose: Retrieves all active employees across all USP categories
+Method: GET
+Endpoint: /api/usp-employees
+
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees
+
+What it does:
+- Fetches all USP employees where isActive = true
+- Returns both system employees and manually added employees
+- Populates category details (name, description)
+- For system employees: includes employee data (name, email, phone)
+- For manual employees: shows manualName and manualPhone
+- Sorted by creation date (newest first)
+- Shows total count of employees
+
+
+9. GET CATEGORIES WITH EMPLOYEE COUNT
+--------------------------------------
+Purpose: Shows all categories with number of employees in each
+Method: GET
+Endpoint: /api/usp-employees/categories-with-count
+
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees/categories-with-count
+
+What it does:
+- Returns all active categories
+- Includes employeeCount for each category
+- Useful for dashboard/statistics view
+- Shows which categories are most/least populated
+- Only counts active employees (isActive = true)
+
+
+10. GET EMPLOYEES BY CATEGORY
+------------------------------
+Purpose: Retrieves all employees in a specific category
+Method: GET
+Endpoint: /api/usp-employees/category/:categoryId
+
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees/category/CATEGORY_ID_HERE
+
+What it does:
+- Fetches all employees belonging to one specific category
+- Returns category name along with employee list
+- Shows both system and manual employees
+- Populates full employee and category details
+- Useful for displaying expertise teams by category
+- Replace CATEGORY_ID_HERE with actual category ID
+
+
+11. GET SINGLE USP EMPLOYEE BY ID
+----------------------------------
+Purpose: Retrieves details of one specific USP employee entry
+Method: GET
+Endpoint: /api/usp-employees/:id
+
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID_HERE
+
+What it does:
+- Fetches one USP employee record by its _id
+- Returns full details with populated category and employee data
+- Shows expertise, experience years, description
+- For system employees: shows linked employee info
+- For manual employees: shows manual name and phone
+- Replace USP_EMPLOYEE_ID_HERE with the USP employee record ID (not regular employee ID)
+
+
+12. UPDATE USP EMPLOYEE
+-----------------------
+Purpose: Updates an existing USP employee's information
+Method: PUT
+Endpoint: /api/usp-employees/:id
+
+curl -X PUT https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID_HERE \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "NEW_CATEGORY_ID_HERE",
+    "expertise": "Updated expertise",
+    "experienceYears": 7,
+    "description": "Updated description",
+    "manualName": "Updated Name",
+    "manualPhone": "+9876543210",
+    "isActive": true
+  }'
+
+What it does:
+- Updates any field of a USP employee record
+- Can move employee to different category by updating categoryId
+- Can update expertise, experience years, description
+- For manual employees: can update manualName and manualPhone
+- Can deactivate employee by setting isActive to false
+- All fields are optional - only send what you want to update
+- Returns updated employee data with populated references
+- Replace USP_EMPLOYEE_ID_HERE with actual USP employee record ID
+
+
+13. DELETE EMPLOYEE FROM CATEGORY
+----------------------------------
+Purpose: Permanently removes an employee from a USP category
+Method: DELETE
+Endpoint: /api/usp-employees/:id
+
+curl -X DELETE https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID_HERE
+
+What it does:
+- Permanently deletes the USP employee record
+- Does NOT delete the actual employee from Employee collection (for system employees)
+- Only removes the link between employee and USP category
+- WARNING: This is a hard delete, not deactivation
+- Returns success message upon deletion
+- Replace USP_EMPLOYEE_ID_HERE with actual USP employee record ID
+
+
+================================================================================
+COMPLETE WORKFLOW EXAMPLE
+================================================================================
+This example shows the complete process from creating a category to managing employees
+
+STEP 1: CREATE A CATEGORY
+--------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-categories \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Property Consultants",
+    "description": "Expert property consultation services"
+  }'
+
+(Save the "_id" from response as CATEGORY_ID)
+
+Expected Response:
+{
+  "success": true,
+  "message": "Category created successfully",
+  "data": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Property Consultants",
+    "description": "Expert property consultation services",
+    "isActive": true,
+    "createdAt": "2025-11-25T10:00:00.000Z",
+    "updatedAt": "2025-11-25T10:00:00.000Z"
+  }
+}
+
+
+STEP 2: ADD EMPLOYEE MANUALLY TO CATEGORY
+------------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-manually \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "CATEGORY_ID_FROM_STEP_1",
+    "name": "Alice Smith",
+    "phone": "+1122334455",
+    "expertise": "Investment Properties",
+    "experienceYears": 4,
+    "description": "Helps clients find profitable investments"
+  }'
+
+What happens:
+- Creates a manual employee entry (no link to Employee collection)
+- Associates employee with the category created in Step 1
+- Stores name and phone directly in USP employee record
+
+Expected Response:
+{
+  "success": true,
+  "message": "Employee added manually to category successfully",
+  "data": {
+    "_id": "673e5b2c3d4e5f6a7b8c9d10",
+    "category": {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Property Consultants",
+      "description": "Expert property consultation services"
+    },
+    "manualName": "Alice Smith",
+    "manualPhone": "+1122334455",
+    "employeeType": "manual",
+    "expertise": "Investment Properties",
+    "experienceYears": 4,
+    "description": "Helps clients find profitable investments",
+    "isActive": true
+  }
+}
+
+
+STEP 3: ADD SYSTEM EMPLOYEE BY ID
+----------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-by-id \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employeeId": "YOUR_EMPLOYEE_ID_HERE",
+    "categoryId": "CATEGORY_ID_FROM_STEP_1",
+    "expertise": "Luxury Real Estate",
+    "experienceYears": 8,
+    "description": "Specialist in high-end properties"
+  }'
+
+What happens:
+- Links an existing employee from Employee collection
+- Validates that employee exists before creating link
+- Associates with category from Step 1
+
+Expected Response:
+{
+  "success": true,
+  "message": "Employee added to category successfully",
+  "data": {
+    "_id": "673e5c3d4e5f6a7b8c9d1011",
+    "category": {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Property Consultants"
+    },
+    "employee": {
+      "_id": "YOUR_EMPLOYEE_ID_HERE",
+      "name": "John Anderson",
+      "email": "john@example.com",
+      "phone": "+1234567890"
+    },
+    "employeeType": "system",
+    "expertise": "Luxury Real Estate",
+    "experienceYears": 8,
+    "description": "Specialist in high-end properties",
+    "isActive": true
+  }
+}
+
+
+STEP 4: GET ALL EMPLOYEES IN CATEGORY
+--------------------------------------
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees/category/CATEGORY_ID_FROM_STEP_1
+
+What happens:
+- Retrieves all employees (both manual and system) in this category
+- Shows the 2 employees added in steps 2 and 3
+
+Expected Response:
+{
+  "success": true,
+  "count": 2,
+  "category": "Property Consultants",
+  "data": [
+    {
+      "_id": "673e5b2c3d4e5f6a7b8c9d10",
+      "category": {...},
+      "manualName": "Alice Smith",
+      "manualPhone": "+1122334455",
+      "employeeType": "manual",
+      "expertise": "Investment Properties",
+      "experienceYears": 4
+    },
+    {
+      "_id": "673e5c3d4e5f6a7b8c9d1011",
+      "category": {...},
+      "employee": {...},
+      "employeeType": "system",
+      "expertise": "Luxury Real Estate",
+      "experienceYears": 8
+    }
+  ]
+}
+
+
+STEP 5: GET CATEGORIES WITH EMPLOYEE COUNT
+-------------------------------------------
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees/categories-with-count
+
+What happens:
+- Shows all categories with employee counts
+- Useful for dashboard overview
+
+Expected Response:
+{
+  "success": true,
+  "count": 1,
+  "data": [
+    {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Property Consultants",
+      "description": "Expert property consultation services",
+      "employeeCount": 2,
+      "createdAt": "2025-11-25T10:00:00.000Z",
+      "updatedAt": "2025-11-25T10:00:00.000Z"
+    }
+  ]
+}
+
+
+================================================================================
+TESTING MULTIPLE CATEGORIES
+================================================================================
+
+CREATE CATEGORY 1 - SALES EXPERTS
+----------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-categories \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Sales Experts", "description": "Top sales performers"}'
+
+What it does:
+- Creates a category for employees specialized in sales
+- Use this category ID to add sales-focused employees
+
+
+CREATE CATEGORY 2 - MARKETING SPECIALISTS
+------------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-categories \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Marketing Specialists", "description": "Property marketing experts"}'
+
+What it does:
+- Creates a category for marketing professionals
+- Useful for grouping employees with marketing expertise
+
+
+CREATE CATEGORY 3 - LEGAL ADVISORS
+-----------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-categories \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Legal Advisors", "description": "Real estate legal consultation"}'
+
+What it does:
+- Creates a category for legal experts
+- Groups employees providing legal consultation services
+
+
+CREATE CATEGORY 4 - FINANCIAL CONSULTANTS
+------------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-categories \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Financial Consultants", "description": "Property financing experts"}'
+
+What it does:
+- Creates a category for financial advisors
+- For employees helping with property financing and investment advice
+
+
+================================================================================
+ADD MULTIPLE EMPLOYEES TO ONE CATEGORY
+================================================================================
+Example: Adding 3 manual employees and 1 system employee to the same category
+
+ADD MANUAL EMPLOYEE 1 - BOB JOHNSON
+------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-manually \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "YOUR_CATEGORY_ID",
+    "name": "Bob Johnson",
+    "phone": "+1234567891",
+    "expertise": "Residential Sales",
+    "experienceYears": 5,
+    "description": "Expert in residential properties"
+  }'
+
+What it does:
+- Adds Bob as a manual employee to specified category
+- Bob is not in your employee system, just stored by name and phone
+- Specialized in residential property sales with 5 years experience
+
+
+ADD MANUAL EMPLOYEE 2 - CAROL WHITE
+------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-manually \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "YOUR_CATEGORY_ID",
+    "name": "Carol White",
+    "phone": "+1234567892",
+    "expertise": "Commercial Leasing",
+    "experienceYears": 7,
+    "description": "Commercial property specialist"
+  }'
+
+What it does:
+- Adds Carol as another manual employee to the same category
+- Specialized in commercial leasing with 7 years experience
+- Can have different expertise within same category
+
+
+ADD MANUAL EMPLOYEE 3 - DAVID BROWN
+------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-manually \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "YOUR_CATEGORY_ID",
+    "name": "David Brown",
+    "phone": "+1234567893",
+    "expertise": "Property Management",
+    "experienceYears": 6,
+    "description": "Manages commercial and residential properties"
+  }'
+
+What it does:
+- Adds David as third manual employee
+- Manages both commercial and residential properties
+- Demonstrates multiple employees with different expertise in one category
+
+
+ADD SYSTEM EMPLOYEE - FROM EMPLOYEE DATABASE
+---------------------------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/usp-employees/add-by-id \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employeeId": "YOUR_EMPLOYEE_ID",
+    "categoryId": "YOUR_CATEGORY_ID",
+    "expertise": "Investment Consulting",
+    "experienceYears": 10,
+    "description": "Senior investment advisor"
+  }'
+
+What it does:
+- Links an existing employee from your Employee collection
+- This employee already has full profile in system
+- Now also featured in USP category with specific expertise
+- Shows you can mix manual and system employees in same category
+
+After adding all 4 employees, use this to verify:
+curl -X GET https://abc.bhoomitechzone.us/api/usp-employees/category/YOUR_CATEGORY_ID
+
+
+================================================================================
+UPDATE EXAMPLES
+================================================================================
+
+UPDATE EMPLOYEE EXPERTISE
+--------------------------
+curl -X PUT https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "expertise": "Senior Property Consultant",
+    "experienceYears": 10,
+    "description": "Promoted to senior consultant"
+  }'
+
+What it does:
+- Updates employee's expertise title to show promotion
+- Increases experience years to reflect growth
+- Updates description to note new senior role
+- Useful for tracking employee career progression
+
+
+UPDATE MANUAL EMPLOYEE CONTACT INFO
+------------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "manualName": "John Smith",
+    "manualPhone": "+9876543210"
+  }'
+
+What it does:
+- Updates name and phone for manually added employee
+- Only works for employeeType = "manual"
+- Use when employee changes contact info or corrects data
+- System employees get info from Employee collection, can't update here
+
+
+MOVE EMPLOYEE TO DIFFERENT CATEGORY
+------------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "categoryId": "NEW_CATEGORY_ID"
+  }'
+
+What it does:
+- Moves employee from current category to a new one
+- Example: Moving from "Sales Experts" to "Marketing Specialists"
+- Validates that new category exists before updating
+- Useful when employee's expertise focus changes
+
+
+DEACTIVATE EMPLOYEE
+-------------------
+curl -X PUT https://abc.bhoomitechzone.us/api/usp-employees/USP_EMPLOYEE_ID \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isActive": false
+  }'
+
+What it does:
+- Soft delete - marks employee as inactive without deleting
+- Inactive employees won't show in GET requests (filtered by isActive: true)
+- Preserves data for historical records
+- Can be reactivated by setting isActive back to true
+- Preferred over hard delete for data integrity
+
+
+================================================================================
+NOTES
+================================================================================
+1. Replace CATEGORY_ID_HERE with actual category ID from response
+2. Replace EMPLOYEE_ID_HERE with actual employee ID from your system
+3. Replace USP_EMPLOYEE_ID_HERE with actual USP employee ID from response
+4. All endpoints return JSON responses
+5. Check server console for any errors
+6. Use GET requests to verify data after POST/PUT/DELETE operations
+7. For pretty JSON output, pipe to jq: curl ... | jq .
+
+================================================================================
+QUICK REFERENCE - ENDPOINT SUMMARY
+================================================================================
+
+CATEGORIES:
+  POST   /api/usp-categories              - Create category
+  GET    /api/usp-categories              - Get all categories
+  GET    /api/usp-categories/:id          - Get single category
+  PUT    /api/usp-categories/:id          - Update category
+  DELETE /api/usp-categories/:id          - Delete category
+
+USP EMPLOYEES:
+  POST   /api/usp-employees/add-by-id     - Add employee by ID
+  POST   /api/usp-employees/add-manually  - Add employee manually
+  GET    /api/usp-employees               - Get all USP employees
+  GET    /api/usp-employees/categories-with-count  - Categories with count
+  GET    /api/usp-employees/category/:id  - Get by category
+  GET    /api/usp-employees/:id           - Get single employee
+  PUT    /api/usp-employees/:id           - Update employee
+  DELETE /api/usp-employees/:id           - Delete employee
+
+
+
+================================================================================
+REMINDER API ENDPOINTS
+================================================================================
+Note: All reminder endpoints require authentication token in Authorization header
+
+1. CREATE REMINDER
+------------------
+Purpose: Creates a new reminder for an assignment
+Method: POST
+Endpoint: /api/reminder/create
+Authentication: Required (verifyToken)
+
+curl -X POST https://abc.bhoomitechzone.us/api/reminder/create \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -d '{
+    "assignmentId": "ASSIGNMENT_ID_HERE",
+    "assignmentType": "LeadAssignment",
+    "title": "Follow up with client",
+    "comment": "Discuss property details and pricing",
+    "reminderDateTime": "2025-11-28T10:00:00.000Z",
+    "isRepeating": false,
+    "repeatType": "daily",
+    "clientName": "John Smith",
+    "phone": "+1234567890",
+    "email": "john@example.com",
+    "location": "New York"
+  }'
+
+What it does:
+- Creates a reminder linked to a specific assignment (LeadAssignment or UserLeadAssignment)
+- Validates that assignment exists and belongs to authenticated employee
+- Stores reminder with date/time trigger
+- Supports repeating reminders (daily, weekly, monthly)
+- Stores client information for display in reminder popup
+- Returns 403 if trying to create reminder for someone else's assignment
+
+Required fields:
+- assignmentId: ID of the lead assignment
+- assignmentType: "LeadAssignment" or "UserLeadAssignment"
+- title: Short reminder title
+- reminderDateTime: When reminder should trigger (ISO 8601 format)
+
+Optional fields:
+- comment: Additional notes (supports HTML)
+- isRepeating: true/false (default: false)
+- repeatType: "daily", "weekly", "monthly" (default: "daily")
+- clientName, phone, email, location: Client info for context
+
+
+2. CREATE REMINDER FROM LEAD
+-----------------------------
+Purpose: Simplified reminder creation from lead data
+Method: POST
+Endpoint: /api/reminder/create-from-lead
+Authentication: Required (verifyToken)
+
+curl -X POST https://abc.bhoomitechzone.us/api/reminder/create-from-lead \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -d '{
+    "assignmentId": "ASSIGNMENT_ID_HERE",
+    "assignmentType": "LeadAssignment",
+    "title": "Call back prospect",
+    "reminderDateTime": "2025-11-28T14:00:00.000Z",
+    "comment": "Client interested in commercial property"
+  }'
+
+What it does:
+- Simplified version of create reminder
+- Automatically pulls client info from assignment
+- Quick way to set reminder without entering all client details
+
+
+3. GET EMPLOYEE REMINDERS (LIST)
+---------------------------------
+Purpose: Retrieves reminders for authenticated employee with filtering
+Method: GET
+Endpoint: /api/reminder/list
+Authentication: Required (verifyToken)
+
+curl -X GET "https://abc.bhoomitechzone.us/api/reminder/list?status=pending&assignmentType=LeadAssignment&page=1&limit=20" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Gets all reminders for the authenticated employee
+- Supports pagination (page and limit)
+- Filter by status: "pending", "completed", "snoozed", "dismissed"
+- Filter by assignmentType: "LeadAssignment" or "UserLeadAssignment"
+- Returns total count and paginated results
+- Sorted by reminder date/time
+
+Query Parameters:
+- status (optional): pending, completed, snoozed, dismissed
+- assignmentType (optional): LeadAssignment, UserLeadAssignment
+- page (optional): page number (default: 1)
+- limit (optional): items per page (default: 20)
+
+
+4. GET DUE REMINDERS
+--------------------
+Purpose: Gets reminders that are currently due for popup notifications
+Method: GET
+Endpoint: /api/reminder/due
+Authentication: Required (verifyToken)
+
+curl -X GET https://abc.bhoomitechzone.us/api/reminder/due \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Returns only reminders with status "pending" where reminderDateTime is now or past
+- Used for popup notifications in frontend
+- Shows reminders that need immediate attention
+- Includes client information for display
+
+
+5. COMPLETE REMINDER
+--------------------
+Purpose: Marks a reminder as completed
+Method: PUT
+Endpoint: /api/reminder/complete/:reminderId
+Authentication: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/api/reminder/complete/REMINDER_ID_HERE \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Changes reminder status from "pending" to "completed"
+- Records completion timestamp
+- For repeating reminders: calculates and sets next trigger time
+- Returns updated reminder data
+- Only owner of reminder can complete it
+
+
+6. SNOOZE REMINDER
+------------------
+Purpose: Postpones a reminder to a later time
+Method: PUT
+Endpoint: /api/reminder/snooze/:reminderId
+Authentication: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/api/reminder/snooze/REMINDER_ID_HERE \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -d '{
+    "snoozeMinutes": 30
+  }'
+
+What it does:
+- Postpones reminder by specified minutes
+- Changes status to "snoozed"
+- Updates reminderDateTime to new time
+- Common snooze times: 15, 30, 60 minutes
+- Returns updated reminder with new trigger time
+
+Request body:
+- snoozeMinutes: number of minutes to postpone (required)
+
+
+7. DISMISS REMINDER
+-------------------
+Purpose: Dismisses a reminder without completing it
+Method: PUT
+Endpoint: /api/reminder/dismiss/:reminderId
+Authentication: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/api/reminder/dismiss/REMINDER_ID_HERE \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Changes reminder status to "dismissed"
+- Keeps reminder in system but marks as no longer needed
+- Different from delete - preserves for records
+- Only owner can dismiss their reminders
+
+
+8. UPDATE REMINDER
+------------------
+Purpose: Updates reminder details and settings
+Method: PUT
+Endpoint: /api/reminder/update/:reminderId
+Authentication: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/api/reminder/update/REMINDER_ID_HERE \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -d '{
+    "title": "Updated reminder title",
+    "comment": "Updated comment with more details",
+    "reminderDateTime": "2025-11-29T10:00:00.000Z",
+    "isRepeating": true,
+    "repeatType": "weekly",
+    "clientName": "John Smith Jr.",
+    "phone": "+1234567899",
+    "email": "newemail@example.com",
+    "location": "Boston"
+  }'
+
+What it does:
+- Updates any field of an existing reminder
+- Can change time, title, comment, client info
+- Can enable/disable repeating and change repeat type
+- All fields are optional - only send what you want to update
+- Returns updated reminder data
+
+
+9. DELETE REMINDER
+------------------
+Purpose: Permanently deletes a reminder
+Method: DELETE
+Endpoint: /api/reminder/delete/:reminderId
+Authentication: Required (verifyToken)
+
+curl -X DELETE https://abc.bhoomitechzone.us/api/reminder/delete/REMINDER_ID_HERE \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Permanently removes reminder from database
+- Hard delete - cannot be recovered
+- Only owner can delete their reminders
+- Consider using dismiss instead for record keeping
+
+
+10. GET REMINDER STATISTICS
+---------------------------
+Purpose: Gets statistics about employee's reminders
+Method: GET
+Endpoint: /api/reminder/stats
+Authentication: Required (verifyToken)
+
+curl -X GET https://abc.bhoomitechzone.us/api/reminder/stats \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Returns count of reminders by status (pending, completed, snoozed, dismissed)
+- Shows total reminders created
+- Useful for dashboard analytics
+- Shows productivity metrics
+
+
+11. GET REMINDERS (LEGACY)
+--------------------------
+Purpose: Legacy endpoint for backward compatibility
+Method: GET
+Endpoint: /api/reminder/reminders
+Authentication: Required (verifyToken)
+
+curl -X GET https://abc.bhoomitechzone.us/api/reminder/reminders \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What it does:
+- Legacy route that returns all employee reminders
+- Use /api/reminder/list instead for new implementations
+- Kept for backward compatibility with older clients
+
+
+================================================================================
+REMINDER WORKFLOW EXAMPLE
+================================================================================
+
+STEP 1: CREATE A REMINDER
+--------------------------
+curl -X POST https://abc.bhoomitechzone.us/api/reminder/create \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "assignmentId": "673e5a1b2c3d4e5f6a7b8c9d",
+    "assignmentType": "LeadAssignment",
+    "title": "Follow up on property inquiry",
+    "comment": "Client wants to visit property next week",
+    "reminderDateTime": "2025-11-28T10:00:00.000Z",
+    "clientName": "Sarah Johnson",
+    "phone": "+1234567890",
+    "email": "sarah@example.com",
+    "location": "Miami"
+  }'
+
+Expected Response:
+{
+  "success": true,
+  "message": "Reminder created successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+    "assignmentId": "673e5a1b2c3d4e5f6a7b8c9d",
+    "assignmentType": "LeadAssignment",
+    "employeeId": "673e5a1b2c3d4e5f6a7b8c8d",
+    "title": "Follow up on property inquiry",
+    "comment": "Client wants to visit property next week",
+    "reminderDateTime": "2025-11-28T10:00:00.000Z",
+    "status": "pending",
+    "isRepeating": false,
+    "clientName": "Sarah Johnson",
+    "phone": "+1234567890",
+    "email": "sarah@example.com",
+    "location": "Miami",
+    "createdAt": "2025-11-27T08:30:00.000Z"
+  }
+}
+
+
+STEP 2: GET DUE REMINDERS
+-------------------------
+curl -X GET https://abc.bhoomitechzone.us/api/reminder/due \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What happens:
+- Frontend polls this endpoint to check for due reminders
+- Shows popup when reminders are due
+- Returns reminders that need immediate action
+
+
+STEP 3: SNOOZE A REMINDER
+-------------------------
+curl -X PUT https://abc.bhoomitechzone.us/api/reminder/snooze/673e6d1e2f3g4h5i6j7k8l9m \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
+  -d '{
+    "snoozeMinutes": 30
+  }'
+
+What happens:
+- Reminder postponed by 30 minutes
+- Status changes to "snoozed"
+- Will appear in due reminders again after 30 minutes
+
+
+STEP 4: COMPLETE THE REMINDER
+------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/api/reminder/complete/673e6d1e2f3g4h5i6j7k8l9m \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+What happens:
+- Marks reminder as completed
+- Removes from due reminders list
+- Recorded in statistics
+
+
+STEP 5: VIEW REMINDER STATS
+---------------------------
+curl -X GET https://abc.bhoomitechzone.us/api/reminder/stats \
+  -H "Authorization: Bearer YOUR_AUTH_TOKEN"
+
+Expected Response:
+{
+  "success": true,
+  "data": {
+    "total": 15,
+    "pending": 5,
+    "completed": 8,
+    "snoozed": 1,
+    "dismissed": 1
+  }
+}
+
+
+================================================================================
+AUTHENTICATION NOTE
+================================================================================
+All reminder endpoints require authentication token in the Authorization header.
+
+To get authentication token:
+1. Login via /api/employees/login endpoint
+2. Copy the token from response
+3. Add to Authorization header as: "Bearer YOUR_TOKEN_HERE"
+
+Example Employee Login:
+curl -X POST https://abc.bhoomitechzone.us/api/employees/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "employee@example.com",
+    "password": "password123"
+  }'
+
+Expected Response:
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "employee": {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "John Doe",
+      "email": "employee@example.com",
+      "phone": "+1234567890",
+      "role": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+        "name": "Sales Manager",
+        "permissions": {
+          "leads": { "create": true, "read": true, "update": true, "delete": false },
+          "clients": { "create": true, "read": true, "update": true, "delete": false }
+        },
+        "isActive": true
+      },
+      "department": "Sales",
+      "isActive": true,
+      "lastLogin": "2025-11-27T10:00:00.000Z"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY3M2U1YTFiMmMzZDRlNWY2YTdiOGM5ZCIsImVtYWlsIjoiZW1wbG95ZWVAZXhhbXBsZS5jb20iLCJyb2xlIjoiNjczZTVhMWIyYzNkNGU1ZjZhN2I4YzhlIiwicGVybWlzc2lvbnMiOnt9LCJpYXQiOjE3MDA0NzIwMDAsImV4cCI6MTcwMDU1ODQwMH0.abc123xyz"
+  }
+}
+
+Save the token from response and use it in subsequent reminder API calls:
+export TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+Then use in requests:
+curl -X GET https://abc.bhoomitechzone.us/api/reminder/list \
+  -H "Authorization: Bearer $TOKEN"
+
+
+================================================================================
+END OF FILE
+================================================================================

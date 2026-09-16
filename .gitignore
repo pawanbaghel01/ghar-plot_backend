@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Environment Variables & Sensitive Keys
+.env
+.env.*
+!.env.example
+serviceAccountKey.json
+text/env.text
+text/serviceAccountKey.text
+text/token.text
+
+# User Uploaded Media (ignore user files, keep default placeholder & gitkeep)
+uploads/*
+!uploads/.gitkeep
+!uploads/default-avatar.jpg
+
+# Temporary & Output / Dump Files
+*.log
+log_temp.txt
+tmp_*
+tokens*
+token_results.txt
+full_token_check.txt
+trigger_*
+notifs_*
+due_output.txt
+reminders_output.txt
+renflair_test_output.txt
+out.txt
+output*.txt
+server_crash_log.txt
+dummy
+.well-known/
+
+# System & OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

@@ -1,0 +1,1198 @@
+================================================================================
+EMPLOYEE API - DOCUMENTATION FOR EMPLOYEES ONLY
+================================================================================
+Base URL: https://abc.bhoomitechzone.us
+
+Last Updated: January 17, 2026
+
+This documentation contains APIs that employees can access with their login token.
+All endpoints require employee authentication unless otherwise specified.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. Employee Authentication
+2. Employee Profile Management
+3. Employee Dashboard
+4. Lead Management
+5. User Lead Management
+6. Reminder Management
+7. Follow-up Management
+8. Role & Permission Management
+9. Contact Management
+10. Alerts
+
+================================================================================
+AUTHENTICATION SETUP
+================================================================================
+
+First, login to get your employee token:
+
+curl -X POST https://abc.bhoomitechzone.us/api/employees/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "your-email@example.com",
+    "password": "your-password"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "employee": {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Your Name",
+      "email": "your-email@example.com",
+      "role": { ... },
+      ...
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+
+Save your token:
+export EMPLOYEE_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+Use this token in all subsequent requests.
+
+================================================================================
+SECTION 1: EMPLOYEE AUTHENTICATION
+================================================================================
+
+1.1 EMPLOYEE LOGIN
+------------------
+Purpose: Login to get authentication token
+Method: POST
+Endpoint: /api/employees/login
+Authentication: Not Required
+
+curl -X POST https://abc.bhoomitechzone.us/api/employees/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "employee@example.com",
+    "password": "password123"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "employee": {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Rahul Kumar",
+      "email": "employee@example.com",
+      "phone": "+919876543210",
+      "department": "Sales",
+      "isActive": true,
+      "role": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+        "name": "Sales Manager",
+        "permissions": {
+          "leads": { "create": true, "read": true, "update": true, "delete": false },
+          "reminders": { "create": true, "read": true, "update": true, "delete": true }
+        }
+      },
+      "giveAdminAccess": false,
+      "adminReminderPopupEnabled": false
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+
+
+================================================================================
+SECTION 2: EMPLOYEE PROFILE MANAGEMENT
+================================================================================
+
+2.1 GET MY PROFILE
+------------------
+Purpose: Get your own profile details
+Method: GET
+Endpoint: /api/employees/:id
+Authentication: Required (Employee Token)
+
+curl -X GET https://abc.bhoomitechzone.us/api/employees/673e5a1b2c3d4e5f6a7b8c9d \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Rahul Kumar",
+    "email": "rahul@example.com",
+    "phone": "+919876543210",
+    "department": "Sales",
+    "isActive": true,
+    "role": {
+      "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+      "name": "Sales Manager",
+      "permissions": {...}
+    },
+    "address": {
+      "street": "456 Park Ave",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "zipCode": "400001",
+      "country": "India"
+    },
+    "giveAdminAccess": false,
+    "adminReminderPopupEnabled": false,
+    "joinDate": "2025-11-15T10:00:00.000Z",
+    "lastLogin": "2026-01-17T09:00:00.000Z"
+  }
+}
+
+
+2.2 UPDATE MY PROFILE
+---------------------
+Purpose: Update your own profile (limited fields: name, phone, address)
+Method: PUT
+Endpoint: /api/employees/:id
+Authentication: Required (Employee Token)
+
+Note: You can only update your own profile with limited fields.
+Cannot change: email, role, department, isActive, giveAdminAccess
+
+curl -X PUT https://abc.bhoomitechzone.us/api/employees/673e5a1b2c3d4e5f6a7b8c9d \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Rahul Kumar Updated",
+    "phone": "+919876543211",
+    "address": {
+      "street": "789 New Road",
+      "city": "Delhi",
+      "state": "Delhi",
+      "zipCode": "110002",
+      "country": "India"
+    }
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Employee updated successfully",
+  "data": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Rahul Kumar Updated",
+    "phone": "+919876543211",
+    "address": {...},
+    "updatedAt": "2026-01-17T10:45:00.000Z"
+  }
+}
+
+
+2.3 CHANGE MY PASSWORD
+----------------------
+Purpose: Change your own password
+Method: PUT
+Endpoint: /api/employees/:id/password
+Authentication: Required (Employee Token)
+
+Note: Current password is required when changing your own password
+
+curl -X PUT https://abc.bhoomitechzone.us/api/employees/673e5a1b2c3d4e5f6a7b8c9d/password \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "oldpassword123",
+    "newPassword": "newpassword456"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Password updated successfully"
+}
+
+
+2.4 GET ALL EMPLOYEES (If You Have Permission)
+-----------------------------------------------
+Purpose: Get list of all employees
+Method: GET
+Endpoint: /api/employees
+Authentication: Required (Employee Token + 'employees' read permission)
+
+curl -X GET "https://abc.bhoomitechzone.us/api/employees?page=1&limit=20&search=rahul&department=Sales&isActive=true" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters:
+- page (optional): Page number (default: 1)
+- limit (optional): Items per page (default: 10)
+- search (optional): Search by name, email, or phone
+- roleFilter (optional): Filter by role ID
+- isActive (optional): Filter by active status (true/false)
+- department (optional): Filter by department
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Rahul Kumar",
+      "email": "rahul@example.com",
+      "phone": "+919876543210",
+      "department": "Sales",
+      "isActive": true,
+      "role": { "name": "Sales Manager" }
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 3,
+    "totalEmployees": 50,
+    "hasNext": true,
+    "hasPrev": false
+  }
+}
+
+
+================================================================================
+SECTION 3: EMPLOYEE DASHBOARD
+================================================================================
+
+3.1 GET MY DASHBOARD STATISTICS
+--------------------------------
+Purpose: Get your personal dashboard statistics
+Method: GET
+Endpoint: /employee/dashboard
+Authentication: Required (Employee Token)
+
+curl -X GET https://abc.bhoomitechzone.us/employee/dashboard \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": {
+    "employee": {
+      "name": "Rahul Kumar",
+      "email": "rahul@example.com",
+      "department": "Sales"
+    },
+    "leads": {
+      "total": 45,
+      "pending": 20,
+      "inProgress": 15,
+      "completed": 10
+    },
+    "userLeads": {
+      "total": 30,
+      "pending": 12,
+      "completed": 18
+    },
+    "reminders": {
+      "total": 25,
+      "pending": 12,
+      "completed": 13,
+      "due": 3
+    },
+    "followUps": {
+      "total": 40,
+      "pending": 18,
+      "completed": 22,
+      "overdue": 5
+    },
+    "recentActivity": [
+      {
+        "type": "lead",
+        "action": "assigned",
+        "timestamp": "2026-01-17T10:00:00.000Z"
+      }
+    ]
+  }
+}
+
+
+3.2 GET EMPLOYEE DASHBOARD STATS (If You Have Permission)
+----------------------------------------------------------
+Purpose: Get overall employee management statistics
+Method: GET
+Endpoint: /api/employees/dashboard-stats
+Authentication: Required (Employee Token + 'employees' read permission)
+
+curl -X GET https://abc.bhoomitechzone.us/api/employees/dashboard-stats \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": {
+    "totalEmployees": 50,
+    "activeEmployees": 45,
+    "inactiveEmployees": 5,
+    "totalRoles": 8,
+    "employeesByDepartment": [
+      { "_id": "Sales", "count": 20 },
+      { "_id": "Marketing", "count": 15 },
+      { "_id": "Support", "count": 10 }
+    ]
+  }
+}
+
+
+================================================================================
+SECTION 4: LEAD MANAGEMENT
+================================================================================
+
+4.1 GET MY ASSIGNED LEADS
+--------------------------
+Purpose: Get all leads assigned to you
+Method: GET
+Endpoint: /employee/leads
+Authentication: Required (Employee Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/employee/leads?status=pending&page=1&limit=20" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters:
+- status (optional): pending, in-progress, completed, cancelled
+- page (optional): Page number (default: 1)
+- limit (optional): Items per page (default: 20)
+- assignmentType (optional): LeadAssignment, ManualInquiry
+
+Response:
+{
+  "success": true,
+  "count": 20,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9o",
+      "lead": {
+        "_id": "673e6d1e2f3g4h5i6j7k8l8o",
+        "clientName": "Amit Sharma",
+        "phone": "+919456789012",
+        "email": "amit@example.com",
+        "location": "Mumbai",
+        "propertyType": "Residential",
+        "budget": 5000000
+      },
+      "assignedTo": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+        "name": "Rahul Kumar"
+      },
+      "assignedBy": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c9c",
+        "name": "Admin User"
+      },
+      "status": "pending",
+      "priority": "high",
+      "notes": "",
+      "assignedAt": "2026-01-15T10:00:00.000Z",
+      "dueDate": "2026-01-25T18:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 2,
+    "totalItems": 20
+  }
+}
+
+
+4.2 GET SINGLE LEAD ASSIGNMENT
+-------------------------------
+Purpose: Get details of a specific lead assignment
+Method: GET
+Endpoint: /employee/leads/:assignmentId
+Authentication: Required (Employee Token)
+
+curl -X GET https://abc.bhoomitechzone.us/employee/leads/673e6d1e2f3g4h5i6j7k8l9o \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9o",
+    "lead": {
+      "clientName": "Amit Sharma",
+      "phone": "+919456789012",
+      "email": "amit@example.com",
+      "location": "Mumbai",
+      "propertyType": "Residential"
+    },
+    "status": "in-progress",
+    "notes": "Client contacted, interested in 3BHK apartments",
+    "assignedAt": "2026-01-15T10:00:00.000Z"
+  }
+}
+
+
+4.3 UPDATE LEAD ASSIGNMENT STATUS
+----------------------------------
+Purpose: Update status and notes for your assigned lead
+Method: PUT
+Endpoint: /employee/leads/:assignmentId
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/employee/leads/673e6d1e2f3g4h5i6j7k8l9o \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "in-progress",
+    "notes": "Client contacted, site visit scheduled for Jan 20",
+    "priority": "high"
+  }'
+
+Status Options: pending, in-progress, completed, cancelled
+Priority Options: low, medium, high
+
+Response:
+{
+  "success": true,
+  "message": "Lead assignment updated successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9o",
+    "status": "in-progress",
+    "notes": "Client contacted, site visit scheduled for Jan 20",
+    "priority": "high",
+    "updatedAt": "2026-01-17T11:30:00.000Z"
+  }
+}
+
+
+================================================================================
+SECTION 5: USER LEAD MANAGEMENT
+================================================================================
+
+5.1 GET MY ASSIGNED USER LEADS
+-------------------------------
+Purpose: Get all user leads assigned to you
+Method: GET
+Endpoint: /employee/user-leads
+Authentication: Required (Employee Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/employee/user-leads?status=pending&page=1&limit=20" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters: Same as Section 4.1
+
+Response:
+{
+  "success": true,
+  "count": 15,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9p",
+      "userLead": {
+        "_id": "673e6d1e2f3g4h5i6j7k8l8p",
+        "name": "Priya Singh",
+        "phone": "+919567890123",
+        "email": "priya@example.com",
+        "interestedIn": "Buy",
+        "location": "Delhi"
+      },
+      "assignedTo": "673e5a1b2c3d4e5f6a7b8c9d",
+      "status": "pending",
+      "assignedAt": "2026-01-16T10:00:00.000Z"
+    }
+  ]
+}
+
+
+5.2 UPDATE USER LEAD ASSIGNMENT
+--------------------------------
+Purpose: Update user lead assignment status
+Method: PUT
+Endpoint: /employee/user-leads/:assignmentId
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/employee/user-leads/673e6d1e2f3g4h5i6j7k8l9p \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "in-progress",
+    "notes": "User wants to buy 2BHK in South Delhi, budget 80L"
+  }'
+
+Response: Similar to Section 4.3
+
+
+================================================================================
+SECTION 6: REMINDER MANAGEMENT
+================================================================================
+
+6.1 CREATE REMINDER
+-------------------
+Purpose: Create a new reminder for yourself
+Method: POST
+Endpoint: /employee/reminders
+Authentication: Required (Employee Token)
+
+curl -X POST https://abc.bhoomitechzone.us/employee/reminders \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Follow up call with Amit",
+    "comment": "Discuss final pricing and payment terms",
+    "reminderDateTime": "2026-01-20T15:00:00.000Z",
+    "clientName": "Amit Sharma",
+    "phone": "+919456789012",
+    "email": "amit@example.com",
+    "location": "Mumbai",
+    "note": "Important: Client wants 3BHK only",
+    "isRepeating": false,
+    "assignmentId": "673e6d1e2f3g4h5i6j7k8l9o",
+    "assignmentType": "LeadAssignment"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Reminder created successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9q",
+    "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+    "title": "Follow up call with Amit",
+    "comment": "Discuss final pricing and payment terms",
+    "reminderDateTime": "2026-01-20T15:00:00.000Z",
+    "status": "pending",
+    "clientName": "Amit Sharma",
+    "phone": "+919456789012",
+    "isActive": true,
+    "createdAt": "2026-01-17T11:00:00.000Z"
+  }
+}
+
+
+6.2 GET MY REMINDERS
+--------------------
+Purpose: Get all your reminders
+Method: GET
+Endpoint: /employee/reminders
+Authentication: Required (Employee Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/employee/reminders?status=pending&page=1&limit=20" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters:
+- status (optional): pending, completed, snoozed, dismissed
+- page (optional): Page number (default: 1)
+- limit (optional): Items per page (default: 20)
+- assignmentType (optional): LeadAssignment, UserLeadAssignment, ManualInquiry
+
+Response:
+{
+  "success": true,
+  "count": 12,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9q",
+      "title": "Follow up call with Amit",
+      "comment": "Discuss final pricing and payment terms",
+      "reminderDateTime": "2026-01-20T15:00:00.000Z",
+      "status": "pending",
+      "clientName": "Amit Sharma",
+      "phone": "+919456789012",
+      "isRepeating": false,
+      "createdAt": "2026-01-17T11:00:00.000Z"
+    }
+  ]
+}
+
+
+6.3 GET DUE REMINDERS
+---------------------
+Purpose: Get reminders that are currently due
+Method: GET
+Endpoint: /employee/reminders/due
+Authentication: Required (Employee Token)
+
+curl -X GET https://abc.bhoomitechzone.us/employee/reminders/due \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "count": 3,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9q",
+      "title": "Call client now",
+      "reminderDateTime": "2026-01-17T10:00:00.000Z",
+      "status": "pending",
+      "clientName": "Amit Sharma",
+      "phone": "+919456789012"
+    }
+  ]
+}
+
+
+6.4 UPDATE REMINDER
+-------------------
+Purpose: Update your reminder details
+Method: PUT
+Endpoint: /employee/reminders/:reminderId
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/employee/reminders/673e6d1e2f3g4h5i6j7k8l9q \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Updated: Follow up call",
+    "comment": "Discuss pricing and also show floor plans",
+    "reminderDateTime": "2026-01-21T15:00:00.000Z",
+    "note": "Client prefers afternoon calls"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Reminder updated successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9q",
+    "title": "Updated: Follow up call",
+    "comment": "Discuss pricing and also show floor plans",
+    "reminderDateTime": "2026-01-21T15:00:00.000Z",
+    "updatedAt": "2026-01-17T12:00:00.000Z"
+  }
+}
+
+
+6.5 COMPLETE REMINDER
+---------------------
+Purpose: Mark reminder as completed with response
+Method: PUT
+Endpoint: /employee/reminders/:reminderId/complete
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/employee/reminders/673e6d1e2f3g4h5i6j7k8l9q/complete \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "completionResponse": "Called client, discussed pricing. Client agreed to visit site on Jan 22. Very interested in Unit 302.",
+    "responseColor": "green"
+  }'
+
+Response Color Options: red (negative), yellow (neutral), green (positive)
+
+Response:
+{
+  "success": true,
+  "message": "Reminder marked as completed",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9q",
+    "status": "completed",
+    "completedAt": "2026-01-17T12:30:00.000Z",
+    "completionResponse": "Called client, discussed pricing...",
+    "responseColor": "green",
+    "responseWordCount": 18
+  }
+}
+
+
+6.6 SNOOZE REMINDER
+-------------------
+Purpose: Snooze reminder to a later time
+Method: PUT
+Endpoint: /employee/reminders/:reminderId/snooze
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/employee/reminders/673e6d1e2f3g4h5i6j7k8l9q/snooze \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snoozedUntil": "2026-01-17T16:00:00.000Z"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Reminder snoozed successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9q",
+    "status": "snoozed",
+    "snoozedUntil": "2026-01-17T16:00:00.000Z",
+    "snoozeCount": 1
+  }
+}
+
+
+6.7 DELETE REMINDER
+-------------------
+Purpose: Delete your reminder
+Method: DELETE
+Endpoint: /employee/reminders/:reminderId
+Authentication: Required (Employee Token)
+
+curl -X DELETE https://abc.bhoomitechzone.us/employee/reminders/673e6d1e2f3g4h5i6j7k8l9q \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "message": "Reminder deleted successfully"
+}
+
+
+================================================================================
+SECTION 7: FOLLOW-UP MANAGEMENT
+================================================================================
+
+7.1 CREATE FOLLOW-UP
+--------------------
+Purpose: Create a follow-up task
+Method: POST
+Endpoint: /employee/follow-ups
+Authentication: Required (Employee Token)
+
+curl -X POST https://abc.bhoomitechzone.us/employee/follow-ups \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "leadId": "673e6d1e2f3g4h5i6j7k8l9o",
+    "leadType": "LeadAssignment",
+    "followUpDate": "2026-01-22T10:00:00.000Z",
+    "notes": "Schedule property site visit with client",
+    "priority": "high",
+    "clientName": "Amit Sharma",
+    "phone": "+919456789012"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Follow-up created successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9r",
+    "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+    "leadId": "673e6d1e2f3g4h5i6j7k8l9o",
+    "leadType": "LeadAssignment",
+    "followUpDate": "2026-01-22T10:00:00.000Z",
+    "status": "pending",
+    "priority": "high",
+    "notes": "Schedule property site visit with client",
+    "clientName": "Amit Sharma",
+    "phone": "+919456789012",
+    "createdAt": "2026-01-17T11:00:00.000Z"
+  }
+}
+
+
+7.2 GET MY FOLLOW-UPS
+---------------------
+Purpose: Get all your follow-ups
+Method: GET
+Endpoint: /employee/follow-ups
+Authentication: Required (Employee Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/employee/follow-ups?status=pending&priority=high&page=1&limit=20" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters:
+- status (optional): pending, completed, cancelled, overdue
+- priority (optional): low, medium, high
+- page (optional): Page number
+- limit (optional): Items per page
+
+Response:
+{
+  "success": true,
+  "count": 18,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9r",
+      "leadId": "673e6d1e2f3g4h5i6j7k8l9o",
+      "followUpDate": "2026-01-22T10:00:00.000Z",
+      "status": "pending",
+      "priority": "high",
+      "notes": "Schedule property site visit with client",
+      "clientName": "Amit Sharma",
+      "phone": "+919456789012"
+    }
+  ]
+}
+
+
+7.3 UPDATE FOLLOW-UP
+--------------------
+Purpose: Update follow-up details
+Method: PUT
+Endpoint: /employee/follow-ups/:followUpId
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/employee/follow-ups/673e6d1e2f3g4h5i6j7k8l9r \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "completed",
+    "notes": "Site visit completed. Client liked Unit 302. Will send quote.",
+    "followUpDate": "2026-01-22T14:00:00.000Z",
+    "priority": "medium"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Follow-up updated successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9r",
+    "status": "completed",
+    "notes": "Site visit completed. Client liked Unit 302.",
+    "completedAt": "2026-01-22T14:30:00.000Z"
+  }
+}
+
+
+7.4 DELETE FOLLOW-UP
+--------------------
+Purpose: Delete a follow-up task
+Method: DELETE
+Endpoint: /employee/follow-ups/:followUpId
+Authentication: Required (Employee Token)
+
+curl -X DELETE https://abc.bhoomitechzone.us/employee/follow-ups/673e6d1e2f3g4h5i6j7k8l9r \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "message": "Follow-up deleted successfully"
+}
+
+
+================================================================================
+SECTION 8: ROLE & PERMISSION MANAGEMENT
+================================================================================
+
+8.1 GET ALL ROLES (If You Have Permission)
+-------------------------------------------
+Purpose: Get list of all roles
+Method: GET
+Endpoint: /api/roles
+Authentication: Required (Employee Token + 'roles' read permission)
+
+curl -X GET https://abc.bhoomitechzone.us/api/roles \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+      "name": "Sales Manager",
+      "description": "Manages sales team and leads",
+      "isActive": true,
+      "permissions": {
+        "leads": { "create": true, "read": true, "update": true, "delete": false },
+        "reminders": { "create": true, "read": true, "update": true, "delete": true },
+        "employees": { "create": false, "read": true, "update": false, "delete": false }
+      }
+    }
+  ]
+}
+
+
+8.2 GET MY PERMISSIONS
+----------------------
+Purpose: Get your current role permissions
+Method: GET
+Endpoint: /api/roles/:roleId
+Authentication: Required (Employee Token)
+
+curl -X GET https://abc.bhoomitechzone.us/api/roles/673e5a1b2c3d4e5f6a7b8c8e \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+    "name": "Sales Manager",
+    "permissions": {
+      "leads": { "create": true, "read": true, "update": true, "delete": false },
+      "reminders": { "create": true, "read": true, "update": true, "delete": true },
+      "clients": { "create": true, "read": true, "update": true, "delete": false },
+      "followUps": { "create": true, "read": true, "update": true, "delete": true },
+      "employees": { "create": false, "read": true, "update": false, "delete": false }
+    }
+  }
+}
+
+
+================================================================================
+SECTION 9: CONTACT MANAGEMENT
+================================================================================
+
+9.1 CREATE CONTACT
+------------------
+Purpose: Add a new contact
+Method: POST
+Endpoint: /api/contact
+Authentication: Required (Employee Token)
+
+curl -X POST https://abc.bhoomitechzone.us/api/contact \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Suresh Patel",
+    "phone": "+919678901234",
+    "email": "suresh@example.com",
+    "location": "Ahmedabad",
+    "interestedIn": "Buy",
+    "propertyType": "Commercial",
+    "budget": 10000000,
+    "notes": "Looking for office space in prime location"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Contact created successfully",
+  "data": {
+    "_id": "673e6d1e2f3g4h5i6j7k8l9s",
+    "name": "Suresh Patel",
+    "phone": "+919678901234",
+    "email": "suresh@example.com",
+    "location": "Ahmedabad",
+    "interestedIn": "Buy",
+    "propertyType": "Commercial",
+    "budget": 10000000,
+    "createdBy": "673e5a1b2c3d4e5f6a7b8c9d",
+    "createdAt": "2026-01-17T12:00:00.000Z"
+  }
+}
+
+
+9.2 GET MY CONTACTS
+-------------------
+Purpose: Get all contacts created by you
+Method: GET
+Endpoint: /api/contact
+Authentication: Required (Employee Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/api/contact?page=1&limit=20&search=suresh" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters:
+- page (optional): Page number
+- limit (optional): Items per page
+- search (optional): Search by name, phone, email
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9s",
+      "name": "Suresh Patel",
+      "phone": "+919678901234",
+      "email": "suresh@example.com",
+      "location": "Ahmedabad",
+      "interestedIn": "Buy",
+      "propertyType": "Commercial"
+    }
+  ]
+}
+
+
+9.3 UPDATE CONTACT
+------------------
+Purpose: Update contact details
+Method: PUT
+Endpoint: /api/contact/:contactId
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/api/contact/673e6d1e2f3g4h5i6j7k8l9s \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "budget": 12000000,
+    "notes": "Budget increased, now looking for bigger office space"
+  }'
+
+Response:
+{
+  "success": true,
+  "message": "Contact updated successfully"
+}
+
+
+================================================================================
+SECTION 10: ALERTS
+================================================================================
+
+10.1 GET MY ALERTS
+------------------
+Purpose: Get alerts/notifications for you
+Method: GET
+Endpoint: /api/alerts
+Authentication: Required (Employee Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/api/alerts?status=unread&page=1&limit=20" \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Query Parameters:
+- status (optional): read, unread
+- type (optional): reminder, lead, followup, system
+- page (optional): Page number
+- limit (optional): Items per page
+
+Response:
+{
+  "success": true,
+  "count": 5,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9t",
+      "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+      "type": "reminder",
+      "title": "Reminder Due",
+      "message": "Your reminder 'Follow up call with Amit' is due now",
+      "status": "unread",
+      "createdAt": "2026-01-17T15:00:00.000Z"
+    }
+  ]
+}
+
+
+10.2 MARK ALERT AS READ
+------------------------
+Purpose: Mark an alert as read
+Method: PUT
+Endpoint: /api/alerts/:alertId/read
+Authentication: Required (Employee Token)
+
+curl -X PUT https://abc.bhoomitechzone.us/api/alerts/673e6d1e2f3g4h5i6j7k8l9t/read \
+  -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+
+Response:
+{
+  "success": true,
+  "message": "Alert marked as read"
+}
+
+
+================================================================================
+COMMON ERROR RESPONSES
+================================================================================
+
+401 Unauthorized - Invalid or missing token:
+{
+  "success": false,
+  "message": "Invalid credentials or account inactive"
+}
+
+403 Forbidden - Insufficient permissions:
+{
+  "success": false,
+  "message": "You don't have permission to perform this action"
+}
+
+404 Not Found:
+{
+  "success": false,
+  "message": "Resource not found"
+}
+
+400 Bad Request:
+{
+  "success": false,
+  "message": "Validation error message"
+}
+
+500 Internal Server Error:
+{
+  "success": false,
+  "message": "Internal server error",
+  "error": "Error details..."
+}
+
+
+================================================================================
+BEST PRACTICES & TIPS
+================================================================================
+
+1. AUTHENTICATION
+   - Always include your token: -H "Authorization: Bearer $EMPLOYEE_TOKEN"
+   - Token expires after 24 hours, re-login to get new token
+   - Keep your token secure, don't share it
+
+2. PERMISSIONS
+   - Check your role permissions before attempting operations
+   - Some endpoints require specific permissions (employees, leads, etc.)
+   - You can always access/modify your own data
+
+3. PAGINATION
+   - Most list endpoints return paginated results
+   - Use page and limit parameters to navigate
+   - Check pagination.totalPages to know total pages
+
+4. SEARCH & FILTERS
+   - Use search parameter for text-based searching
+   - Combine filters for precise results
+   - All searches are case-insensitive
+
+5. STATUS UPDATES
+   - Always provide meaningful notes when updating statuses
+   - Use appropriate status values as documented
+   - Track your progress with proper status management
+
+6. REMINDERS
+   - Create reminders for important follow-ups
+   - Use completion responses to document outcomes
+   - Color code responses: red (failed), yellow (partial), green (success)
+
+7. FOLLOW-UPS
+   - Link follow-ups to leads for better tracking
+   - Set appropriate priorities
+   - Complete follow-ups when done, don't delete
+
+8. DATA MANAGEMENT
+   - Keep your profile updated
+   - Document all client interactions in notes
+   - Use proper date-time format: ISO 8601 (YYYY-MM-DDTHH:mm:ss.sssZ)
+
+
+================================================================================
+QUICK REFERENCE - COMMON WORKFLOWS
+================================================================================
+
+DAILY WORKFLOW:
+1. Login → Get token
+2. Check dashboard → /employee/dashboard
+3. View due reminders → /employee/reminders/due
+4. Check assigned leads → /employee/leads?status=pending
+5. Update lead status → PUT /employee/leads/:id
+6. Create follow-ups → POST /employee/follow-ups
+7. Complete reminders → PUT /employee/reminders/:id/complete
+
+LEAD MANAGEMENT WORKFLOW:
+1. Get assigned leads → /employee/leads
+2. View lead details → /employee/leads/:id
+3. Create reminder for lead → POST /employee/reminders
+4. Update lead status → PUT /employee/leads/:id
+5. Create follow-up → POST /employee/follow-ups
+6. Complete lead → PUT /employee/leads/:id (status: completed)
+
+REMINDER WORKFLOW:
+1. Create reminder → POST /employee/reminders
+2. View pending reminders → /employee/reminders?status=pending
+3. When due, complete → PUT /employee/reminders/:id/complete
+4. Or snooze → PUT /employee/reminders/:id/snooze
+5. Add completion response with color coding
+
+
+================================================================================
+SUPPORT & HELP
+================================================================================
+
+If you need help:
+1. Check this documentation first
+2. Verify your permissions with /api/roles/:roleId
+3. Check error messages for specific issues
+4. Contact your admin for permission-related issues
+5. For technical issues, contact IT support
+
+Remember: You can always view and update your own data, even without
+specific permissions for other employees' data.
+
+================================================================================
+END OF DOCUMENTATION - EMPLOYEE ONLY APIS
+================================================================================

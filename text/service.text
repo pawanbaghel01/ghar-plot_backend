@@ -1,0 +1,195 @@
+
+
+import ServiceBooking from "../models/serviceSchema.js";
+import User from "../models/user.js";
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+//  Gmail transporter setup
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+//  Book Service Controller
+export const bookService = async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    const { serviceType, location, saveAs } = req.body;
+
+    // Basic validation
+    if (!serviceType || !location?.flatNo || !location?.address) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
+    }
+
+    const serviceTypeOptions = [
+      "Full House Cleaning",
+      "Plumbing",
+      "Bathroom Cleaning",
+      "House Painter",
+    ];
+    if (!serviceTypeOptions.includes(serviceType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service type",
+      });
+    }
+
+    // Save booking in DB
+    const booking = new ServiceBooking({
+      userId,
+      serviceType,
+      location,
+      saveAs,
+    });
+
+    await booking.save();
+
+    // Get user details
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+        userName:user.fullName,
+        userEmail:user.email,
+        bookingDetails:booking,
+        
+      });
+    }
+
+    //  Prepare email content
+    const mailOptions = {
+      from: `"Property Service" <${process.env.EMAIL_USER}>`, // sender name & email
+      to: user.email, // receiver email
+      subject: "Service Booking Confirmed",
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color:#333;">
+          <h2 style="color:#2c3e50;">Hi ${user.fullName},</h2>
+          <p>Your service booking has been <b>successfully confirmed!</b></p>
+
+          <h3 style="margin-top: 20px;">Booking Details:</h3>
+          <ul>
+            <li><strong>Service:</strong> ${serviceType}</li>
+            <li><strong>Address:</strong> ${location.flatNo}, ${
+        location.address
+      }</li>
+            <li><strong>Landmark:</strong> ${location.landmark || "N/A"}</li>
+            <li><strong>Saved As:</strong> ${saveAs || "Not specified"}</li>
+          </ul>
+
+          <p style="margin-top: 20px;">Thank you for choosing our service! </p>
+          <p>— Team Property Service</p>
+        </div>
+      `,
+    };
+
+    //  Send email
+    await transporter.sendMail(mailOptions);
+
+    // Success response
+    res.status(201).json({
+      success: true,
+      message: "Service booked successfully and confirmation email sent",
+      booking,
+    });
+  } catch (error) {
+    console.error("Booking Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Cancel Service
+export const cancelService = async (req, res) => {
+  try {
+    const { bookingId, userId } = req.query;
+
+    if (!bookingId || !userId) {
+      return res.status(400).json({ success: false, message: "Missing bookingId or userId" });
+    }
+
+    const booking = await ServiceBooking.findOne({ _id: bookingId, userId });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    await ServiceBooking.deleteOne({ _id: bookingId });
+
+    res.status(200).json({ success: true, message: "Booking cancelled successfully" });
+  } catch (error) {
+    console.error("Cancel Service Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Service
+export const updateService = async (req, res) => {
+  try {
+    const { bookingId, userId } = req.query;
+    const { serviceType, location, saveAs } = req.body;
+
+    const booking = await ServiceBooking.findOne({ _id: bookingId, userId });
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    if (serviceType) booking.serviceType = serviceType;
+    if (location) booking.location = location;
+    if (saveAs) booking.saveAs = saveAs;
+
+    await booking.save();
+
+    res.status(200).json({ success: true, message: "Booking updated successfully", booking });
+  } catch (error) {
+    console.error("Update Service Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+// Get Services for Logged-in User
+export const getUserServices = async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "Missing userId" });
+    }
+
+    const bookings = await ServiceBooking.find({ userId }).sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, bookings });
+  } catch (error) {
+    console.error("Get User Services Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get All Services (Admin)
+export const getAllServices = async (req, res) => {
+  try {
+    const { userId } = req.query; // admin's userId for auth
+    const admin = await User.findById(userId);
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Access denied, admin only" });
+    }
+
+    const bookings = await ServiceBooking.find().populate("userId", "fullName email").sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, bookings });
+  } catch (error) {
+    console.error("Get All Services Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

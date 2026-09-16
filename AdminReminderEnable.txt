@@ -1,0 +1,1329 @@
+================================================================================
+ADMIN REMINDER MANAGEMENT API - COMPLETE DOCUMENTATION
+================================================================================
+Base URL: https://abc.bhoomitechzone.us
+
+================================================================================
+OVERVIEW
+================================================================================
+Yeh API admin ko allow karta hai ki wo:
+1. Kisi bhi employee ki reminders dekh sake
+2. Specific employees ke liye reminder popup enable/disable kar sake
+3. Jab popup enable ho, to us employee ke due reminders admin ko bhi dikhe
+4. Jab popup disable ho, to sirf employee ko hi reminder jaye
+
+================================================================================
+AUTHENTICATION
+================================================================================
+Sabhi endpoints ke liye Admin authentication token required hai.
+
+Admin Login:
+curl -X POST https://abc.bhoomitechzone.us/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "password": "adminpassword"
+  }'
+
+Response se token save karo aur use karo:
+export ADMIN_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+================================================================================
+API ENDPOINTS
+================================================================================
+
+1. GET ADMIN REMINDER STATISTICS
+---------------------------------
+Purpose: Admin dashboard ke liye overall statistics
+Method: GET
+Endpoint: /admin/reminders/stats
+Authentication: Required (Admin Token)
+
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/stats \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Response Example:
+{
+  "success": true,
+  "data": {
+    "employees": {
+      "total": 50,
+      "withPopupEnabled": 12
+    },
+    "reminders": {
+      "total": 250,
+      "pending": 85,
+      "completed": 150,
+      "currentlyDue": 15,
+      "byStatus": [
+        { "_id": "pending", "count": 85 },
+        { "_id": "completed", "count": 150 },
+        { "_id": "snoozed", "count": 10 },
+        { "_id": "dismissed", "count": 5 }
+      ]
+    },
+    "topEmployees": [
+      {
+        "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+        "name": "Rahul Kumar",
+        "email": "rahul@example.com",
+        "reminderCount": 45
+      }
+    ]
+  }
+}
+
+Kya Milega:
+- Total employees aur kitne employees ka popup enabled hai
+- Total reminders, pending, completed, due counts
+- Status-wise breakdown
+- Top 5 employees jinke sabse zyada reminders hain
+
+
+2. GET ALL EMPLOYEES WITH REMINDER STATUS
+------------------------------------------
+Purpose: Sare employees ki list with their popup status aur reminder counts
+Method: GET
+Endpoint: /admin/reminders/employees-status
+Authentication: Required (Admin Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/admin/reminders/employees-status?page=1&limit=20&search=rahul" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Query Parameters:
+- page (optional): Page number (default: 1)
+- limit (optional): Items per page (default: 20)
+- search (optional): Search by name, email, or department
+
+Response Example:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Rahul Kumar",
+      "email": "rahul@example.com",
+      "phone": "+919876543210",
+      "department": "Sales",
+      "adminReminderPopupEnabled": true,
+      "isActive": true,
+      "role": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+        "name": "Sales Manager"
+      },
+      "reminderStats": {
+        "totalPending": 12,
+        "currentlyDue": 3
+      }
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 3,
+    "totalItems": 50,
+    "itemsPerPage": 20
+  }
+}
+
+Kya Milega:
+- Har employee ka naam, email, department
+- adminReminderPopupEnabled status (true/false)
+- Pending aur currently due reminders count
+
+
+3. GET ALL DUE REMINDERS FOR ADMIN
+-----------------------------------
+Purpose: Sirf un employees ke due reminders jo popup enabled hai
+Method: GET
+Endpoint: /admin/reminders/due-all
+Authentication: Required (Admin Token)
+
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/due-all \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Response Example:
+{
+  "success": true,
+  "count": 8,
+  "totalEmployees": 3,
+  "data": [
+    {
+      "employee": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+        "name": "Rahul Kumar",
+        "email": "rahul@example.com",
+        "phone": "+919876543210",
+        "department": "Sales"
+      },
+      "reminders": [
+        {
+          "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+          "title": "Follow up with client",
+          "comment": "Discuss property pricing",
+          "reminderDateTime": "2025-11-27T10:00:00.000Z",
+          "status": "pending",
+          "clientName": "Amit Sharma",
+          "phone": "+919123456789",
+          "email": "amit@example.com",
+          "location": "Delhi"
+        }
+      ]
+    }
+  ]
+}
+
+Kya Milega:
+- Sirf un employees ke reminders jinke liye popup enabled hai
+- Employee-wise grouped reminders
+- Client details with reminder
+
+Frontend Usage:
+- Yeh endpoint admin dashboard pe popup dikhane ke liye use karo
+- Har 1-2 minute me poll karo to check for new due reminders
+- Notification bell icon pe count dikha sakte ho
+
+
+4. GET SPECIFIC EMPLOYEE'S ALL REMINDERS
+-----------------------------------------
+Purpose: Kisi specific employee ki saari reminders dekhna
+Method: GET
+Endpoint: /admin/reminders/employee/:employeeId
+Authentication: Required (Admin Token)
+
+curl -X GET "https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d?status=pending&page=1&limit=10" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Query Parameters:
+- status (optional): pending, completed, snoozed, dismissed
+- assignmentType (optional): LeadAssignment, UserLeadAssignment
+- page (optional): Page number (default: 1)
+- limit (optional): Items per page (default: 20)
+
+Response Example:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+      "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+      "title": "Follow up call",
+      "comment": "Discuss final pricing",
+      "reminderDateTime": "2025-11-28T14:00:00.000Z",
+      "status": "pending",
+      "clientName": "Priya Singh",
+      "phone": "+919876543210"
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 2,
+    "totalItems": 15,
+    "itemsPerPage": 10
+  }
+}
+
+Frontend Usage:
+- Employee detail page pe saari reminders list dikhane ke liye
+- Filter by status to show pending, completed, etc.
+
+
+5. GET SPECIFIC EMPLOYEE'S DUE REMINDERS
+-----------------------------------------
+Purpose: Kisi specific employee ke currently due reminders
+Method: GET
+Endpoint: /admin/reminders/employee/:employeeId/due
+Authentication: Required (Admin Token)
+
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d/due \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Response Example:
+{
+  "success": true,
+  "count": 3,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+      "title": "Call back client",
+      "reminderDateTime": "2025-11-27T09:00:00.000Z",
+      "status": "pending",
+      "clientName": "Suresh Patel",
+      "phone": "+919123456789"
+    }
+  ]
+}
+
+Frontend Usage:
+- Employee profile page pe currently due reminders highlight karne ke liye
+- Red badge/notification dikhane ke liye
+
+
+6. TOGGLE EMPLOYEE REMINDER POPUP (ENABLE/DISABLE)
+---------------------------------------------------
+Purpose: Kisi employee ke liye admin reminder popup enable/disable karna
+Method: PUT
+Endpoint: /admin/reminders/employee/:employeeId/toggle-popup
+Authentication: Required (Admin Token)
+
+ENABLE POPUP:
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d/toggle-popup \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true
+  }'
+
+DISABLE POPUP:
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d/toggle-popup \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+
+Request Body:
+{
+  "enabled": true  // true = popup enable, false = popup disable
+}
+
+Response Example:
+{
+  "success": true,
+  "message": "Admin reminder popup enabled for employee",
+  "data": {
+    "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Rahul Kumar",
+    "email": "rahul@example.com",
+    "adminReminderPopupEnabled": true
+  }
+}
+
+Frontend Usage:
+- Employee list me har employee ke samne toggle switch rakho
+- Switch ON = Admin ko bhi popup dikhega
+- Switch OFF = Sirf employee ko popup dikhega
+
+
+================================================================================
+FRONTEND IMPLEMENTATION GUIDE
+================================================================================
+
+1. ADMIN DASHBOARD PAGE
+------------------------
+Components Required:
+- Statistics Cards (total employees, reminders, due count)
+- Employee List with Popup Toggle
+- Due Reminders Section
+
+API Calls on Page Load:
+a) GET /admin/reminders/stats - Dashboard statistics ke liye
+b) GET /admin/reminders/employees-status - Employee list ke liye
+
+Example Code:
+```javascript
+// Dashboard Statistics
+const fetchDashboardStats = async () => {
+  const response = await fetch('https://abc.bhoomitechzone.us/admin/reminders/stats', {
+    headers: {
+      'Authorization': `Bearer ${adminToken}`
+    }
+  });
+  const data = await response.json();
+  // Update state with stats
+  setStats(data.data);
+};
+
+// Employee List with Reminder Status
+const fetchEmployees = async (page = 1, search = '') => {
+  const response = await fetch(
+    `https://abc.bhoomitechzone.us/admin/reminders/employees-status?page=${page}&limit=20&search=${search}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      }
+    }
+  );
+  const data = await response.json();
+  setEmployees(data.data);
+  setPagination(data.pagination);
+};
+```
+
+
+2. EMPLOYEE LIST WITH TOGGLE
+-----------------------------
+Har employee ke paas toggle switch hona chahiye:
+
+Example UI:
+```jsx
+{employees.map(employee => (
+  <div key={employee._id} className="employee-card">
+    <div className="employee-info">
+      <h3>{employee.name}</h3>
+      <p>{employee.email} | {employee.department}</p>
+      <div className="reminder-stats">
+        <span>Pending: {employee.reminderStats.totalPending}</span>
+        <span className="due-badge">Due: {employee.reminderStats.currentlyDue}</span>
+      </div>
+    </div>
+    
+    <div className="popup-toggle">
+      <label>
+        <input 
+          type="checkbox"
+          checked={employee.adminReminderPopupEnabled}
+          onChange={() => togglePopup(employee._id, !employee.adminReminderPopupEnabled)}
+        />
+        Show me reminders
+      </label>
+    </div>
+  </div>
+))}
+```
+
+Toggle Function:
+```javascript
+const togglePopup = async (employeeId, enabled) => {
+  const response = await fetch(
+    `https://abc.bhoomitechzone.us/admin/reminders/employee/${employeeId}/toggle-popup`,
+    {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ enabled })
+    }
+  );
+  
+  if (response.ok) {
+    // Update employee list
+    fetchEmployees();
+    alert(`Popup ${enabled ? 'enabled' : 'disabled'} for employee`);
+  }
+};
+```
+
+
+3. ADMIN REMINDER POPUP SYSTEM
+-------------------------------
+Polling for Due Reminders (har 1-2 minute):
+
+```javascript
+import { useEffect, useState } from 'react';
+
+const AdminReminderPopup = () => {
+  const [dueReminders, setDueReminders] = useState([]);
+  const [showPopup, setShowPopup] = useState(false);
+
+  // Poll for due reminders every 2 minutes
+  useEffect(() => {
+    const fetchDueReminders = async () => {
+      const response = await fetch(
+        'https://abc.bhoomitechzone.us/admin/reminders/due-all',
+        {
+          headers: {
+            'Authorization': `Bearer ${adminToken}`
+          }
+        }
+      );
+      const data = await response.json();
+      
+      if (data.count > 0) {
+        setDueReminders(data.data);
+        setShowPopup(true);
+        // Play notification sound
+        playNotificationSound();
+      }
+    };
+
+    // Initial fetch
+    fetchDueReminders();
+    
+    // Poll every 2 minutes
+    const interval = setInterval(fetchDueReminders, 2 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [adminToken]);
+
+  if (!showPopup || dueReminders.length === 0) return null;
+
+  return (
+    <div className="admin-reminder-popup">
+      <div className="popup-header">
+        <h3>Employee Reminders Due ({dueReminders.reduce((sum, emp) => sum + emp.reminders.length, 0)})</h3>
+        <button onClick={() => setShowPopup(false)}>×</button>
+      </div>
+      
+      <div className="popup-content">
+        {dueReminders.map(employeeData => (
+          <div key={employeeData.employee._id} className="employee-reminders">
+            <h4>{employeeData.employee.name} ({employeeData.employee.department})</h4>
+            
+            {employeeData.reminders.map(reminder => (
+              <div key={reminder._id} className="reminder-item">
+                <div className="reminder-title">{reminder.title}</div>
+                <div className="reminder-client">
+                  Client: {reminder.clientName} | {reminder.phone}
+                </div>
+                <div className="reminder-time">
+                  Due: {new Date(reminder.reminderDateTime).toLocaleString()}
+                </div>
+                <div className="reminder-comment">{reminder.comment}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+```
+
+
+4. EMPLOYEE DETAIL PAGE
+------------------------
+Kisi specific employee ki saari reminders dekhne ke liye:
+
+```javascript
+const EmployeeDetailPage = ({ employeeId }) => {
+  const [reminders, setReminders] = useState([]);
+  const [filter, setFilter] = useState('pending');
+  const [page, setPage] = useState(1);
+
+  const fetchEmployeeReminders = async () => {
+    const response = await fetch(
+      `https://abc.bhoomitechzone.us/admin/reminders/employee/${employeeId}?status=${filter}&page=${page}&limit=10`,
+      {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`
+        }
+      }
+    );
+    const data = await response.json();
+    setReminders(data.data);
+  };
+
+  useEffect(() => {
+    fetchEmployeeReminders();
+  }, [employeeId, filter, page]);
+
+  return (
+    <div className="employee-detail">
+      <div className="filter-tabs">
+        <button onClick={() => setFilter('pending')}>Pending</button>
+        <button onClick={() => setFilter('completed')}>Completed</button>
+        <button onClick={() => setFilter('snoozed')}>Snoozed</button>
+        <button onClick={() => setFilter('dismissed')}>Dismissed</button>
+      </div>
+
+      <div className="reminders-list">
+        {reminders.map(reminder => (
+          <div key={reminder._id} className="reminder-card">
+            <h4>{reminder.title}</h4>
+            <p>Time: {new Date(reminder.reminderDateTime).toLocaleString()}</p>
+            <p>Client: {reminder.clientName}</p>
+            <p>Status: <span className={`status-${reminder.status}`}>{reminder.status}</span></p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+```
+
+
+5. NOTIFICATION BELL ICON
+--------------------------
+Header me notification bell with count:
+
+```javascript
+const NotificationBell = () => {
+  const [dueCount, setDueCount] = useState(0);
+
+  useEffect(() => {
+    const fetchDueCount = async () => {
+      const response = await fetch(
+        'https://abc.bhoomitechzone.us/admin/reminders/due-all',
+        {
+          headers: {
+            'Authorization': `Bearer ${adminToken}`
+          }
+        }
+      );
+      const data = await response.json();
+      setDueCount(data.count);
+    };
+
+    fetchDueCount();
+    const interval = setInterval(fetchDueCount, 60000); // Every 1 minute
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="notification-bell">
+      <i className="bell-icon">🔔</i>
+      {dueCount > 0 && (
+        <span className="notification-badge">{dueCount}</span>
+      )}
+    </div>
+  );
+};
+```
+
+
+================================================================================
+COMPLETE WORKFLOW EXAMPLE
+================================================================================
+
+SCENARIO: Admin "Suresh" ko employee "Rahul" ke reminders dekhne hain
+
+STEP 1: Admin Login
+--------------------
+curl -X POST https://abc.bhoomitechzone.us/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "suresh@admin.com",
+    "password": "admin123"
+  }'
+
+Response se token save karo.
+
+
+STEP 2: Employee List Dekho
+----------------------------
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employees-status \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Is list me dekho ki Rahul ka adminReminderPopupEnabled true hai ya false.
+
+
+STEP 3: Rahul Ke Liye Popup Enable Karo
+----------------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID/toggle-popup \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true
+  }'
+
+Ab Rahul ke due reminders admin ko bhi dikhenge.
+
+
+STEP 4: Due Reminders Check Karo
+---------------------------------
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/due-all \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Yeh API sirf un employees ke reminders degi jinke liye popup enabled hai.
+Rahul ke reminders is list me honge.
+
+
+STEP 5: Rahul Ki Specific Reminders Dekho
+------------------------------------------
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+
+Rahul ki saari reminders (pending, completed, etc.) mil jayengi.
+
+
+STEP 6: Agar Popup Disable Karna Ho
+------------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID/toggle-popup \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+
+Ab Rahul ke reminders sirf use hi dikhenge, admin ko nahi.
+
+
+================================================================================
+KEY POINTS FOR FRONTEND
+================================================================================
+
+1. POLLING FREQUENCY:
+   - Dashboard stats: Har 5 minute me refresh
+   - Due reminders (for popup): Har 1-2 minute me check
+   - Notification bell count: Har 1 minute me update
+
+2. POPUP BEHAVIOR:
+   - adminReminderPopupEnabled = true: Admin ko popup dikhao
+   - adminReminderPopupEnabled = false: Popup mat dikhao
+   - Sound notification play karo jab new reminder due ho
+
+3. UI ELEMENTS:
+   - Toggle switch har employee ke paas
+   - Notification bell with badge count
+   - Popup modal with employee-wise grouped reminders
+   - Filter tabs for reminder status
+
+4. ERROR HANDLING:
+   - Token expire hone pe auto logout
+   - Network errors ke liye retry mechanism
+   - User-friendly error messages
+
+5. OPTIMIZATION:
+   - Use React Query ya SWR for caching
+   - Debounce search input
+   - Lazy load employee list
+   - Store admin token in secure storage (httpOnly cookie)
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+ISSUE 1: 404 Error on Toggle Popup Endpoint
+--------------------------------------------
+Error: "Cannot PUT /admin/reminders/employee/{id}/toggle-popup"
+
+SOLUTION:
+1. Server restart karo:
+   cd /www/wwwroot/amincrmghar/backend
+   pkill -f "node server.js"
+   nohup node server.js > server.log 2>&1 &
+
+2. Server chal raha hai check karo:
+   curl https://abc.bhoomitechzone.us/admin/reminders/stats
+
+3. Response aana chahiye: {"message":"No token, authorization denied"}
+
+
+ISSUE 2: Database Field Not Saving (adminReminderPopupEnabled)
+---------------------------------------------------------------
+Error: Update successful but value resets after refresh
+Console: "⚠️ Value not persisted! Expected: true Got: undefined"
+
+ROOT CAUSE: 
+Employee update controller me adminReminderPopupEnabled field missing thi.
+
+SOLUTION - FIXED (Nov 27, 2025):
+✅ Updated /controllers/employeeController.js
+✅ Added adminReminderPopupEnabled to updateEmployee function
+✅ Field ab properly save hoga database me
+
+Testing:
+1. Toggle employee popup enable/disable
+2. Refresh page - value persist hona chahiye
+3. GET /admin/employees/:id - adminReminderPopupEnabled field dikhna chahiye
+
+
+ISSUE 3: "No token, authorization denied"
+------------------------------------------
+Error: Frontend se request jane pe token nahi ja raha
+
+SOLUTION - Frontend Code Check:
+```javascript
+// ❌ WRONG
+const response = await axios.put(url, data);
+
+// ✅ CORRECT
+const token = localStorage.getItem('adminToken'); // ya jahan bhi store kiya ho
+const response = await axios.put(url, data, {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+```
+
+Complete Example:
+```javascript
+const togglePopup = async (employeeId, enabled) => {
+  try {
+    // Token retrieve karo
+    const token = localStorage.getItem('adminToken');
+    
+    if (!token) {
+      alert('Please login first!');
+      // Redirect to login
+      window.location.href = '/admin/login';
+      return;
+    }
+
+    // API call
+    const response = await axios.put(
+      `https://abc.bhoomitechzone.us/admin/reminders/employee/${employeeId}/toggle-popup`,
+      { enabled },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data.success) {
+      console.log('✅ Popup toggled successfully');
+      // Refresh employee list
+      fetchEmployees();
+    }
+  } catch (error) {
+    console.error('❌ Error:', error);
+    
+    if (error.response?.status === 401) {
+      alert('Session expired! Please login again.');
+      localStorage.removeItem('adminToken');
+      window.location.href = '/admin/login';
+    } else {
+      alert('Error toggling popup: ' + error.message);
+    }
+  }
+};
+```
+
+
+ISSUE 3: CORS Error
+-------------------
+Error: "Access to XMLHttpRequest has been blocked by CORS policy"
+
+SOLUTION:
+Backend me CORS already enabled hai. Agar fir bhi issue ho:
+
+1. Request headers check karo - Authorization header sahi format me ho
+2. Browser console me network tab dekho - request properly ja rahi hai ya nahi
+3. Preflight OPTIONS request success ho rahi hai confirm karo
+
+
+ISSUE 4: Token Expire Ho Gaya
+------------------------------
+Error: "Token is not valid" ya "jwt expired"
+
+SOLUTION:
+```javascript
+// Axios interceptor lagao automatic token refresh ke liye
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    if (error.response?.status === 401) {
+      // Token expired - re-login karo
+      localStorage.removeItem('adminToken');
+      window.location.href = '/admin/login';
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+
+QUICK DEBUG CHECKLIST:
+----------------------
+✅ Server running on port 8866?
+   Command: ps aux | grep "node server.js"
+
+✅ API endpoint accessible?
+   Command: curl https://abc.bhoomitechzone.us/admin/reminders/stats
+
+✅ Admin token valid hai?
+   - Browser console me check: localStorage.getItem('adminToken')
+   - Token empty na ho
+   - Token format: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+✅ Request headers sahi hain?
+   - Authorization: Bearer TOKEN (Bearer ke baad space zaroori hai!)
+   - Content-Type: application/json
+
+✅ Request body sahi format me?
+   - JSON.stringify() use karo
+   - {"enabled": true} or {"enabled": false}
+
+
+================================================================================
+TESTING SCRIPT
+================================================================================
+
+Backend folder me test script hai:
+/www/wwwroot/amincrmghar/backend/test-admin-reminder-api.sh
+
+Usage:
+1. Script me admin email/password update karo
+2. Run karo:
+   chmod +x test-admin-reminder-api.sh
+   ./test-admin-reminder-api.sh
+
+Yeh script automatically:
+- Admin login karega
+- Employees list fetch karega
+- Popup enable/disable test karega
+- Stats aur due reminders check karega
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Admin Panel Features:
+✅ Dashboard with overall statistics
+✅ Employee list with popup enable/disable toggle
+✅ Real-time due reminder notifications
+✅ View any employee's reminders
+✅ Filter reminders by status
+✅ Notification bell with count
+
+Employee Reminder Privacy:
+✅ Popup disabled = Sirf employee ko dikhega
+✅ Popup enabled = Admin ko bhi dikhega
+✅ Admin kisi bhi employee ki history dekh sakta hai
+
+Frontend Integration:
+✅ Polling mechanism for real-time updates
+✅ Toggle switch for easy enable/disable
+✅ Notification system with sound alerts
+✅ Employee-wise grouped reminders in popup
+✅ Filter and pagination support
+
+Backend Status:
+✅ Server running on port 8866
+✅ All 6 endpoints working
+✅ Admin authentication middleware active
+✅ Routes registered at /admin/reminders
+✅ Employee schema updated with popup field
+✅ Database field save fix applied (Nov 27, 2025)
+
+Frontend Implementation Required:
+⚠️  Real-time polling for /admin/reminders/due-all endpoint
+⚠️  Popup display when reminders are due
+⚠️  Sound notification when new reminders arrive
+⚠️  Authorization header properly send karo
+⚠️  Token localStorage se retrieve karo
+⚠️  Error handling for 401/404 implement karo
+
+
+================================================================================
+ADMIN REAL-TIME REMINDER POPUP - COMPLETE CODE
+================================================================================
+
+Yeh code apne Admin Dashboard component me add karo:
+
+```javascript
+import { useEffect, useState, useRef } from 'react';
+import axios from 'axios';
+
+const AdminDashboard = () => {
+  const [dueReminders, setDueReminders] = useState([]);
+  const [showReminderPopup, setShowReminderPopup] = useState(false);
+  const [reminderCount, setReminderCount] = useState(0);
+  const audioRef = useRef(null);
+  const previousCountRef = useRef(0);
+
+  // Sound notification
+  const playNotificationSound = () => {
+    if (audioRef.current) {
+      audioRef.current.play().catch(err => console.log('Audio play error:', err));
+    }
+  };
+
+  // Fetch due reminders for admin
+  const fetchAdminDueReminders = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      
+      if (!token) {
+        console.log('No admin token found');
+        return;
+      }
+
+      const response = await axios.get(
+        'https://abc.bhoomitechzone.us/admin/reminders/due-all',
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      if (response.data.success) {
+        const { data, count } = response.data;
+        
+        console.log('🔔 Admin Due Reminders:', count);
+        
+        // Check if new reminders arrived
+        if (count > previousCountRef.current && count > 0) {
+          console.log('🆕 New reminders detected! Playing sound...');
+          playNotificationSound();
+          setShowReminderPopup(true);
+        }
+        
+        previousCountRef.current = count;
+        setReminderCount(count);
+        setDueReminders(data);
+      }
+    } catch (error) {
+      console.error('Error fetching admin due reminders:', error);
+      
+      // Handle token expiry
+      if (error.response?.status === 401) {
+        localStorage.removeItem('adminToken');
+        window.location.href = '/admin/login';
+      }
+    }
+  };
+
+  // Poll every 1 minute for due reminders
+  useEffect(() => {
+    // Initial fetch
+    fetchAdminDueReminders();
+    
+    // Poll every 60 seconds (1 minute)
+    const pollInterval = setInterval(() => {
+      console.log('🔄 Polling for admin due reminders...');
+      fetchAdminDueReminders();
+    }, 60000); // 60 seconds
+    
+    return () => clearInterval(pollInterval);
+  }, []);
+
+  return (
+    <div className="admin-dashboard">
+      {/* Hidden audio element for notification sound */}
+      <audio 
+        ref={audioRef} 
+        src="/notification-sound.mp3" 
+        preload="auto"
+      />
+
+      {/* Notification Bell Icon */}
+      <div className="notification-bell">
+        <i className="bell-icon">🔔</i>
+        {reminderCount > 0 && (
+          <span className="notification-badge">{reminderCount}</span>
+        )}
+      </div>
+
+      {/* Reminder Popup Modal */}
+      {showReminderPopup && dueReminders.length > 0 && (
+        <div className="admin-reminder-popup-overlay">
+          <div className="admin-reminder-popup">
+            <div className="popup-header">
+              <h3>
+                🔔 Employee Reminders Due ({reminderCount})
+              </h3>
+              <button 
+                className="close-btn"
+                onClick={() => setShowReminderPopup(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="popup-content">
+              {dueReminders.map(employeeData => (
+                <div 
+                  key={employeeData.employee._id} 
+                  className="employee-reminder-section"
+                >
+                  <div className="employee-header">
+                    <h4>{employeeData.employee.name}</h4>
+                    <span className="department-badge">
+                      {employeeData.employee.department}
+                    </span>
+                  </div>
+                  
+                  {employeeData.reminders.map(reminder => (
+                    <div 
+                      key={reminder._id} 
+                      className="reminder-card due-reminder"
+                    >
+                      <div className="reminder-header">
+                        <strong>{reminder.title}</strong>
+                        <span className="time-badge">
+                          {new Date(reminder.reminderDateTime).toLocaleString()}
+                        </span>
+                      </div>
+                      
+                      <div className="reminder-details">
+                        <p><strong>Client:</strong> {reminder.clientName}</p>
+                        <p><strong>Phone:</strong> {reminder.phone}</p>
+                        {reminder.email && (
+                          <p><strong>Email:</strong> {reminder.email}</p>
+                        )}
+                        {reminder.location && (
+                          <p><strong>Location:</strong> {reminder.location}</p>
+                        )}
+                        {reminder.comment && (
+                          <p><strong>Note:</strong> {reminder.comment}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            
+            <div className="popup-footer">
+              <button 
+                className="btn btn-primary"
+                onClick={() => setShowReminderPopup(false)}
+              >
+                Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rest of your dashboard content */}
+    </div>
+  );
+};
+
+export default AdminDashboard;
+```
+
+
+================================================================================
+CSS STYLING FOR POPUP
+================================================================================
+
+Add this CSS to your stylesheet:
+
+```css
+/* Notification Bell */
+.notification-bell {
+  position: relative;
+  cursor: pointer;
+  padding: 10px;
+}
+
+.bell-icon {
+  font-size: 24px;
+}
+
+.notification-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: #ff4444;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* Reminder Popup Overlay */
+.admin-reminder-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reminder Popup */
+.admin-reminder-popup {
+  background: white;
+  border-radius: 12px;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.popup-header {
+  padding: 20px;
+  background: #4CAF50;
+  color: white;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.popup-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 32px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.popup-content {
+  padding: 20px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.employee-reminder-section {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.employee-reminder-section:last-child {
+  border-bottom: none;
+}
+
+.employee-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.employee-header h4 {
+  margin: 0;
+  color: #333;
+}
+
+.department-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reminder-card {
+  background: #f5f5f5;
+  border-left: 4px solid #4CAF50;
+  padding: 15px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+
+.due-reminder {
+  background: #fff3cd;
+  border-left-color: #ff9800;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.reminder-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.time-badge {
+  background: #ff9800;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.reminder-details p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.popup-footer {
+  padding: 15px 20px;
+  background: #f9f9f9;
+  border-radius: 0 0 12px 12px;
+  text-align: right;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #45a049;
+}
+```
+
+
+================================================================================
+NOTIFICATION SOUND FILE
+================================================================================
+
+Download a notification sound and save as `/public/notification-sound.mp3`
+
+Or use this inline base64 sound (add to your component):
+
+```javascript
+// Alternative: Use browser's default beep
+const playNotificationSound = () => {
+  // Create audio context
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.frequency.value = 800;
+  oscillator.type = 'sine';
+  
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.5);
+};
+```
+
+
+================================================================================
+TESTING THE IMPLEMENTATION
+================================================================================
+
+1. Enable popup for an employee:
+   - Go to Admin Reminders page
+   - Toggle switch ON for any employee
+   
+2. Create a test reminder for that employee:
+   - Set time to current time + 1 minute
+   - Save reminder
+
+3. Wait for 1-2 minutes:
+   - Admin should see notification bell count increase
+   - Sound should play
+   - Popup should automatically appear
+
+4. Console logs to verify:
+   - "🔄 Polling for admin due reminders..." (every minute)
+   - "🔔 Admin Due Reminders: X"
+   - "🆕 New reminders detected! Playing sound..."
+
+================================================================================
+END OF FILE
+================================================================================

@@ -1,0 +1,985 @@
+================================================================================
+COMPLETE API DOCUMENTATION - ADMIN CRM GHAR
+================================================================================
+Base URL: https://abc.bhoomitechzone.us
+Server Port: 8866
+Date: November 27, 2025
+Version: 1.0.0
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+1. AUTHENTICATION APIs
+   - User Authentication (/auth)
+   - Admin Authentication (/admin)
+   - Employee Authentication (/api/employees)
+
+2. PROPERTY APIs
+   - Property Management (/property)
+   - Get Properties (/api/properties)
+   - Save/Bookmark Properties (/api/properties)
+   - Rent Properties (/api/properties)
+   - Sell Properties (/api/properties)
+   - Bought Properties (/api/properties)
+   - Recent Properties (/api/properties)
+   - Revenue (/api/properties)
+
+3. USER MANAGEMENT APIs
+   - User Profile (/api/users)
+   - Change Password (/api)
+   - Edit Profile (/api/users)
+
+4. EMPLOYEE MANAGEMENT APIs
+   - Employee CRUD (/api/employees)
+   - Admin Employee (/admin/employees)
+   - Employee Dashboard (/employee/dashboard)
+   - Employee Reports (/api/employee-reports, /admin/employee-reports)
+
+5. ROLE & PERMISSION APIs
+   - Roles (/api/roles)
+   - Admin Roles (/admin/roles)
+
+6. LEAD ASSIGNMENT APIs
+   - Lead Assignments (/admin/leads)
+   - Employee Leads (/employee/leads)
+   - User Lead Assignments (/admin/user-leads)
+   - Employee User Leads (/employee/user-leads)
+   - Client Assignments (/api/clients)
+
+7. REMINDER APIs
+   - Reminders (/api/reminder)
+   - Employee Reminders (/employee/reminders)
+   - Admin Reminders (/admin/reminders)
+
+8. FOLLOW-UP APIs
+   - Follow-ups (/api/follow-ups)
+   - Employee Follow-ups (/employee/follow-ups)
+
+9. SERVICE APIs (/api/services)
+
+10. INQUIRY APIs (/api/inquiry)
+
+11. NOTIFICATION APIs
+    - Notifications (/api/notification)
+    - Admin Notifications (/admin/notifications)
+    - FCM Tokens (/api)
+
+12. CHAT APIs (/api/chat)
+
+13. PAYMENT APIs
+    - Payment (/api/payment)
+    - Service Payment (/api/services)
+
+14. CONTACT APIs (/api/contact)
+
+15. ALERT APIs (/api/alerts)
+
+16. USP (UNIQUE SELLING POINT) APIs
+    - USP Categories (/api/usp-categories)
+    - USP Employees (/api/usp-employees)
+
+17. APPLICATION UPDATE (/application)
+
+
+================================================================================
+1. AUTHENTICATION APIs
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USER AUTHENTICATION (/auth)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.1 Send Phone OTP
+------------------
+Method: POST
+Endpoint: /auth/send-phone-otp
+
+curl -X POST https://abc.bhoomitechzone.us/auth/send-phone-otp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "+919876543210"
+  }'
+
+Use Case: Send OTP to phone number for verification
+
+
+1.2 Verify Phone OTP
+--------------------
+Method: POST
+Endpoint: /auth/verify-phone-otp
+
+curl -X POST https://abc.bhoomitechzone.us/auth/verify-phone-otp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "+919876543210",
+    "otp": "123456"
+  }'
+
+Use Case: Verify OTP sent to phone
+
+
+1.3 User Signup
+---------------
+Method: POST
+Endpoint: /auth/signup
+
+curl -X POST https://abc.bhoomitechzone.us/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Rahul Kumar",
+    "email": "rahul@example.com",
+    "password": "securepassword",
+    "phoneNumber": "+919876543210"
+  }'
+
+Use Case: New user registration
+
+
+1.4 User Login
+--------------
+Method: POST
+Endpoint: /auth/login
+
+curl -X POST https://abc.bhoomitechzone.us/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "rahul@example.com",
+    "password": "securepassword"
+  }'
+
+Response:
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Rahul Kumar",
+    "email": "rahul@example.com"
+  }
+}
+
+Use Case: User authentication
+
+
+1.5 Google Login
+----------------
+Method: POST
+Endpoint: /auth/google-login
+
+curl -X POST https://abc.bhoomitechzone.us/auth/google-login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "googleToken": "google_oauth_token_here"
+  }'
+
+Use Case: Login with Google OAuth
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ADMIN AUTHENTICATION (/admin)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.6 Admin Signup
+----------------
+Method: POST
+Endpoint: /admin/signup
+
+curl -X POST https://abc.bhoomitechzone.us/admin/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "password": "adminpassword",
+    "name": "Admin User"
+  }'
+
+Use Case: Register new admin
+
+
+1.7 Admin Login
+---------------
+Method: POST
+Endpoint: /admin/login
+
+curl -X POST https://abc.bhoomitechzone.us/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "password": "adminpassword"
+  }'
+
+Response:
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "admin": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+    "email": "admin@example.com",
+    "name": "Admin User"
+  }
+}
+
+Use Case: Admin authentication
+
+
+1.8 Admin Change Password
+--------------------------
+Method: PUT
+Endpoint: /admin/admin-change-password
+Auth: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/admin/admin-change-password \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "oldPassword": "currentpassword",
+    "newPassword": "newpassword"
+  }'
+
+Use Case: Change admin password
+
+
+1.9 Send Two-Factor Auth OTP
+-----------------------------
+Method: POST
+Endpoint: /admin/send-otp
+
+curl -X POST https://abc.bhoomitechzone.us/admin/send-otp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com"
+  }'
+
+Use Case: Send OTP for 2FA
+
+
+1.10 Verify Two-Factor Auth OTP
+--------------------------------
+Method: POST
+Endpoint: /admin/verify-otp
+
+curl -X POST https://abc.bhoomitechzone.us/admin/verify-otp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "otp": "123456"
+  }'
+
+Use Case: Verify 2FA OTP
+
+
+1.11 Enable Two-Factor Authentication
+--------------------------------------
+Method: PUT
+Endpoint: /admin/enableTwoFA
+Auth: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/admin/enableTwoFA \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Use Case: Enable 2FA for admin account
+
+
+1.12 Disable Two-Factor Authentication
+---------------------------------------
+Method: PUT
+Endpoint: /admin/disableTwoFA
+Auth: Required (verifyToken)
+
+curl -X PUT https://abc.bhoomitechzone.us/admin/disableTwoFA \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Use Case: Disable 2FA for admin account
+
+
+1.13 Get Active Sessions
+-------------------------
+Method: GET
+Endpoint: /admin/sessions
+Auth: Required (verifyToken)
+
+curl -X GET https://abc.bhoomitechzone.us/admin/sessions \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Use Case: View all active admin sessions
+
+
+1.14 Logout Session
+--------------------
+Method: DELETE
+Endpoint: /admin/sessions/:sessionId
+Auth: Required (verifyToken)
+
+curl -X DELETE https://abc.bhoomitechzone.us/admin/sessions/SESSION_ID \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Use Case: Logout specific session
+
+
+1.15 Admin Forgot Password
+---------------------------
+Method: POST
+Endpoint: /admin/forgot-password
+
+curl -X POST https://abc.bhoomitechzone.us/admin/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com"
+  }'
+
+Use Case: Request password reset OTP
+
+
+1.16 Admin Reset Password
+--------------------------
+Method: POST
+Endpoint: /admin/reset-password
+
+curl -X POST https://abc.bhoomitechzone.us/admin/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "admin@example.com",
+    "otp": "123456",
+    "newPassword": "newpassword"
+  }'
+
+Use Case: Reset admin password with OTP
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EMPLOYEE AUTHENTICATION (/api/employees)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1.17 Employee Login
+--------------------
+Method: POST
+Endpoint: /api/employees/login
+
+curl -X POST https://abc.bhoomitechzone.us/api/employees/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "employee@example.com",
+    "password": "employeepassword"
+  }'
+
+Response:
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "employee": {
+    "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Employee Name",
+    "email": "employee@example.com",
+    "role": "Sales"
+  }
+}
+
+Use Case: Employee authentication
+
+
+================================================================================
+ADMIN REMINDER MANAGEMENT APIS
+================================================================================
+
+1. GET ADMIN REMINDER STATISTICS
+---------------------------------
+Purpose: Admin dashboard ke liye overall reminder statistics
+Method: GET
+Endpoint: /admin/reminders/stats
+
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/stats \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+Response:
+{
+  "success": true,
+  "data": {
+    "employees": {
+      "total": 50,
+      "withPopupEnabled": 12
+    },
+    "reminders": {
+      "total": 250,
+      "pending": 85,
+      "completed": 150,
+      "currentlyDue": 15,
+      "byStatus": [
+        { "_id": "pending", "count": 85 },
+        { "_id": "completed", "count": 150 },
+        { "_id": "snoozed", "count": 10 },
+        { "_id": "dismissed", "count": 5 }
+      ]
+    },
+    "topEmployees": [
+      {
+        "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+        "name": "Rahul Kumar",
+        "email": "rahul@example.com",
+        "reminderCount": 45
+      }
+    ]
+  }
+}
+
+Use Case:
+- Admin dashboard pe statistics cards dikhane ke liye
+- Total employees, reminders count
+- Popup enabled employees count
+- Status-wise reminder breakdown
+- Top 5 employees with most reminders
+
+
+2. GET ALL EMPLOYEES WITH REMINDER STATUS
+------------------------------------------
+Purpose: Sare employees ki list with their popup status aur reminder counts
+Method: GET
+Endpoint: /admin/reminders/employees-status
+
+curl -X GET "https://abc.bhoomitechzone.us/admin/reminders/employees-status?page=1&limit=20&search=rahul" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+Query Parameters:
+- page (optional): Page number, default: 1
+- limit (optional): Items per page, default: 20
+- search (optional): Search by name, email, or department
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+      "name": "Rahul Kumar",
+      "email": "rahul@example.com",
+      "phone": "+919876543210",
+      "department": "Sales",
+      "adminReminderPopupEnabled": true,
+      "isActive": true,
+      "role": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c8e",
+        "name": "Sales Manager"
+      },
+      "reminderStats": {
+        "totalPending": 12,
+        "currentlyDue": 3
+      }
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 3,
+    "totalItems": 50,
+    "itemsPerPage": 20
+  }
+}
+
+Use Case:
+- Employee list page pe table/cards dikhane ke liye
+- Har employee ka popup status (toggle switch)
+- Search functionality implement karne ke liye
+- Pagination support
+- Reminder counts per employee
+
+
+3. GET ALL DUE REMINDERS FOR ADMIN
+-----------------------------------
+Purpose: Sirf un employees ke due reminders jo popup enabled hai
+Method: GET
+Endpoint: /admin/reminders/due-all
+
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/due-all \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+Response:
+{
+  "success": true,
+  "count": 8,
+  "totalEmployees": 3,
+  "data": [
+    {
+      "employee": {
+        "_id": "673e5a1b2c3d4e5f6a7b8c9d",
+        "name": "Rahul Kumar",
+        "email": "rahul@example.com",
+        "phone": "+919876543210",
+        "department": "Sales"
+      },
+      "reminders": [
+        {
+          "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+          "title": "Follow up with client",
+          "comment": "Discuss property pricing",
+          "reminderDateTime": "2025-11-27T10:00:00.000Z",
+          "status": "pending",
+          "clientName": "Amit Sharma",
+          "phone": "+919123456789",
+          "email": "amit@example.com",
+          "location": "Delhi"
+        }
+      ]
+    }
+  ]
+}
+
+Use Case:
+- Admin ko real-time popup notifications dikhane ke liye
+- Notification bell icon pe count badge
+- Har 1-2 minute me poll karo for due reminders
+- Sound notification play karo jab new reminder due ho
+- Employee-wise grouped reminders display
+
+
+4. GET SPECIFIC EMPLOYEE'S ALL REMINDERS
+-----------------------------------------
+Purpose: Kisi specific employee ki saari reminders dekhna
+Method: GET
+Endpoint: /admin/reminders/employee/:employeeId
+
+curl -X GET "https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d?status=pending&page=1&limit=10" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+URL Parameters:
+- employeeId (required): Employee ka MongoDB ObjectId
+
+Query Parameters:
+- status (optional): pending, completed, snoozed, dismissed
+- assignmentType (optional): LeadAssignment, UserLeadAssignment
+- page (optional): Page number, default: 1
+- limit (optional): Items per page, default: 20
+
+Response:
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+      "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+      "title": "Follow up call",
+      "comment": "Discuss final pricing",
+      "reminderDateTime": "2025-11-28T14:00:00.000Z",
+      "status": "pending",
+      "clientName": "Priya Singh",
+      "phone": "+919876543210",
+      "email": "priya@example.com",
+      "location": "Mumbai"
+    }
+  ],
+  "pagination": {
+    "currentPage": 1,
+    "totalPages": 2,
+    "totalItems": 15,
+    "itemsPerPage": 10
+  }
+}
+
+Use Case:
+- Employee detail page pe saari reminders list
+- Filter by status (pending, completed, etc.)
+- Pagination support for large reminder lists
+- View complete reminder history
+
+
+5. GET SPECIFIC EMPLOYEE'S DUE REMINDERS
+-----------------------------------------
+Purpose: Kisi specific employee ke currently due reminders
+Method: GET
+Endpoint: /admin/reminders/employee/:employeeId/due
+
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d/due \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+
+URL Parameters:
+- employeeId (required): Employee ka MongoDB ObjectId
+
+Response:
+{
+  "success": true,
+  "count": 3,
+  "data": [
+    {
+      "_id": "673e6d1e2f3g4h5i6j7k8l9m",
+      "title": "Call back client",
+      "comment": "Discuss payment terms",
+      "reminderDateTime": "2025-11-27T09:00:00.000Z",
+      "status": "pending",
+      "clientName": "Suresh Patel",
+      "phone": "+919123456789",
+      "email": "suresh@example.com"
+    }
+  ]
+}
+
+Use Case:
+- Employee profile page pe currently due reminders highlight
+- Red badge/notification dikhane ke liye
+- Quick view of urgent reminders
+- Count display on employee card
+
+
+6. TOGGLE EMPLOYEE REMINDER POPUP (ENABLE/DISABLE)
+---------------------------------------------------
+Purpose: Kisi employee ke liye admin reminder popup enable/disable karna
+Method: PUT
+Endpoint: /admin/reminders/employee/:employeeId/toggle-popup
+
+ENABLE POPUP:
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d/toggle-popup \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true
+  }'
+
+DISABLE POPUP:
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/673e5a1b2c3d4e5f6a7b8c9d/toggle-popup \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+
+URL Parameters:
+- employeeId (required): Employee ka MongoDB ObjectId
+
+Request Body:
+{
+  "enabled": true  // true = enable, false = disable
+}
+
+Response:
+{
+  "success": true,
+  "message": "Admin reminder popup enabled for employee",
+  "data": {
+    "employeeId": "673e5a1b2c3d4e5f6a7b8c9d",
+    "name": "Rahul Kumar",
+    "email": "rahul@example.com",
+    "adminReminderPopupEnabled": true
+  }
+}
+
+Use Case:
+- Employee list me toggle switch ke liye
+- ON = Admin ko bhi popup dikhega jab reminder due ho
+- OFF = Sirf employee ko popup dikhega
+- Real-time enable/disable without page refresh
+
+
+================================================================================
+COMPLETE WORKFLOW EXAMPLE
+================================================================================
+
+Scenario: Admin "Suresh" employee "Rahul" ke reminders monitor karna chahta hai
+
+STEP 1: Admin Login
+--------------------
+curl -X POST https://abc.bhoomitechzone.us/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "suresh@admin.com",
+    "password": "admin123"
+  }'
+
+Save the token from response
+
+
+STEP 2: Dashboard Stats Dekho
+------------------------------
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/stats \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Kya milega: Total employees, reminders, due count, top performers
+
+
+STEP 3: Employee List Fetch Karo
+---------------------------------
+curl -X GET "https://abc.bhoomitechzone.us/admin/reminders/employees-status?search=rahul" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Rahul ko list me find karo aur uska employeeId note karo
+
+
+STEP 4: Rahul Ke Liye Popup Enable Karo
+----------------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID/toggle-popup \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+Ab Rahul ke due reminders admin ko bhi dikhenge
+
+
+STEP 5: Rahul Ki All Reminders Dekho
+-------------------------------------
+curl -X GET "https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID?status=pending" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Rahul ki pending reminders ki complete list
+
+
+STEP 6: Rahul Ke Due Reminders Check Karo
+------------------------------------------
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID/due \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Sirf currently due reminders
+
+
+STEP 7: Admin Dashboard Pe All Due Reminders
+---------------------------------------------
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/due-all \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+Sabhi employees ke due reminders (jinka popup enabled hai)
+Isko har 1-2 minute me poll karo for real-time notifications
+
+
+STEP 8: Agar Popup Disable Karna Ho
+------------------------------------
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/RAHUL_EMPLOYEE_ID/toggle-popup \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+
+Ab Rahul ke reminders sirf Rahul ko dikhenge
+
+
+================================================================================
+ERROR RESPONSES
+================================================================================
+
+401 Unauthorized
+----------------
+{
+  "message": "No token, authorization denied"
+}
+Cause: Authorization header missing ya invalid
+
+
+{
+  "message": "Token is not valid"
+}
+Cause: Token expired ya corrupted
+Action: Re-login karo
+
+
+404 Not Found
+-------------
+{
+  "success": false,
+  "message": "Employee not found"
+}
+Cause: Invalid employeeId
+Action: Correct employeeId use karo
+
+
+400 Bad Request
+---------------
+{
+  "success": false,
+  "message": "enabled field is required"
+}
+Cause: Required field missing in request body
+Action: Request body sahi format me bhejo
+
+
+500 Internal Server Error
+--------------------------
+{
+  "success": false,
+  "message": "Server error",
+  "error": "Error details..."
+}
+Cause: Database connection issue ya server error
+Action: Check server logs, retry after some time
+
+
+================================================================================
+BEST PRACTICES
+================================================================================
+
+1. TOKEN MANAGEMENT:
+   - Token ko secure storage me save karo (httpOnly cookie recommended)
+   - Har request me Authorization header bhejo
+   - Token expire hone pe auto re-login implement karo
+
+2. POLLING STRATEGY:
+   - Dashboard stats: Har 5 minute me refresh
+   - Due reminders: Har 1 minute me check (for popup)
+   - Employee list: On-demand refresh (button click)
+
+3. ERROR HANDLING:
+   - 401 error pe auto logout aur login page redirect
+   - Network errors pe retry with exponential backoff
+   - User-friendly error messages display karo
+
+4. OPTIMIZATION:
+   - Use pagination for large lists
+   - Cache API responses using React Query/SWR
+   - Debounce search input (500ms)
+   - Show loading states during API calls
+
+5. SECURITY:
+   - Never log token in console
+   - Use HTTPS only
+   - Validate all user inputs
+   - Handle CORS properly
+
+
+================================================================================
+TESTING WITH CURL
+================================================================================
+
+Set token as environment variable:
+export ADMIN_TOKEN="your_token_here"
+
+Test all endpoints:
+
+# 1. Stats
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/stats \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 2. Employees List
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employees-status \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 3. Due Reminders
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/due-all \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 4. Specific Employee Reminders (replace EMPLOYEE_ID)
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employee/EMPLOYEE_ID \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 5. Employee Due Reminders (replace EMPLOYEE_ID)
+curl -X GET https://abc.bhoomitechzone.us/admin/reminders/employee/EMPLOYEE_ID/due \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# 6. Toggle Popup Enable (replace EMPLOYEE_ID)
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/EMPLOYEE_ID/toggle-popup \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+
+# 7. Toggle Popup Disable (replace EMPLOYEE_ID)
+curl -X PUT https://abc.bhoomitechzone.us/admin/reminders/employee/EMPLOYEE_ID/toggle-popup \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+
+
+================================================================================
+FRONTEND INTEGRATION EXAMPLES
+================================================================================
+
+Using Fetch API:
+----------------
+const fetchDueReminders = async () => {
+  const token = localStorage.getItem('adminToken');
+  
+  const response = await fetch(
+    'https://abc.bhoomitechzone.us/admin/reminders/due-all',
+    {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    }
+  );
+  
+  const data = await response.json();
+  return data;
+};
+
+
+Using Axios:
+------------
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: 'https://abc.bhoomitechzone.us',
+  headers: {
+    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+  }
+});
+
+// Get stats
+const stats = await api.get('/admin/reminders/stats');
+
+// Toggle popup
+const toggle = await api.put(
+  `/admin/reminders/employee/${employeeId}/toggle-popup`,
+  { enabled: true }
+);
+
+
+Using React Query:
+------------------
+import { useQuery } from '@tanstack/react-query';
+
+const useDueReminders = () => {
+  return useQuery({
+    queryKey: ['dueReminders'],
+    queryFn: async () => {
+      const response = await fetch(
+        'https://abc.bhoomitechzone.us/admin/reminders/due-all',
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        }
+      );
+      return response.json();
+    },
+    refetchInterval: 60000 // Poll every 1 minute
+  });
+};
+
+
+================================================================================
+RATE LIMITING & QUOTAS
+================================================================================
+
+Current Limits:
+- No rate limiting implemented
+- Unlimited requests allowed
+
+Recommended Client-Side Limits:
+- Stats API: Max 1 request per 5 minutes
+- Due Reminders: Max 1 request per minute
+- Employee List: On-demand only
+- Toggle: On user action only
+
+
+================================================================================
+CHANGELOG
+================================================================================
+
+Version 1.0.0 (November 27, 2025)
+---------------------------------
+✅ Initial release
+✅ 6 admin reminder endpoints
+✅ Authentication with JWT
+✅ Pagination support
+✅ Search functionality
+✅ Real-time polling support
+✅ Employee-wise reminder grouping
+✅ Toggle popup enable/disable
+✅ Database field persistence fix
+
+
+================================================================================
+SUPPORT & CONTACT
+================================================================================
+
+Server URL: https://abc.bhoomitechzone.us
+Server Port: 8866
+Environment: Production
+
+For issues:
+- Check server logs: /www/wwwroot/amincrmghar/backend/server.log
+- Verify server status: ps aux | grep "node server.js"
+- Test endpoint: curl https://abc.bhoomitechzone.us/admin/reminders/stats
+
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================

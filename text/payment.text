@@ -1,0 +1,46 @@
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+
+const handlePayment = async () => {
+  const res = await fetch("http://localhost:4000/api/payment/create-order", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount: 500, currency: "INR" }), // ₹500
+  });
+  const data = await res.json();
+
+  const options = {
+    key: "YOUR_RAZORPAY_KEY_ID",
+    amount: data.order.amount,
+    currency: data.order.currency,
+    name: "My Property Platform",
+    description: "Service Payment",
+    order_id: data.order.id,
+    theme: { color: "#0f9d58" },
+    //  Allow only UPI & Card
+    method: {
+      netbanking: false,
+      card: true,
+      upi: true,
+      wallet: false,
+      emi: false,
+    },
+    handler: async function (response) {
+      const verifyRes = await fetch("http://localhost:4000/api/payment/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(response),
+      });
+
+      const verifyData = await verifyRes.json();
+      if (verifyData.success) {
+        alert(" Payment Successful!");
+      } else {
+        alert(" Payment Verification Failed!");
+      }
+    },
+  };
+
+  const rzp = new Razorpay(options);
+  rzp.open();
+};
