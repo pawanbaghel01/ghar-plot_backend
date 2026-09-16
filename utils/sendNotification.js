@@ -11,19 +11,16 @@ export const sendPushNotification = async (
     // 🔥 Current time (जब notification trigger हो)
     const now = new Date();
     const formattedTime = now.toISOString();
+    // 🔥 FIX: Use raw ms diff (timezone-independent) instead of getHours() which is UTC on Render
     const getPeriod = (nextTime) => {
       if (!nextTime) return "";
-      const now = new Date();
       const next = new Date(nextTime);
       if (isNaN(next.getTime())) return "";
-      const nowMinutes = now.getHours() * 60 + now.getMinutes();
-      const nextMinutes = next.getHours() * 60 + next.getMinutes();
-      let diff = nextMinutes - nowMinutes;
-      if (diff < 0) {
-        diff = (24 * 60) + diff;
-      }
-      const hours = Math.floor(diff / 60);
-      const minutes = diff % 60;
+      const diffMs = next.getTime() - now.getTime();
+      if (diffMs <= 0) return "";
+      const diffMinutes = Math.round(diffMs / 60000);
+      const hours = Math.floor(diffMinutes / 60);
+      const minutes = diffMinutes % 60;
       if (hours > 0 && minutes > 0) {
         return `${hours} hr ${minutes} min`;
       } else if (hours > 0) {
@@ -44,7 +41,8 @@ export const sendPushNotification = async (
         reason: data.reason || "",
         date: data.date || "",
         time: data.time || "",
-        scheduledDateTime: formattedTime,
+        // 🔥 FIX: Use actual scheduledDateTime from cron, not trigger time
+        scheduledDateTime: data.scheduledDateTime || formattedTime,
         period: period,
         repeatDaily: String(data.repeatDaily ?? false),
         repeatFrequency: data.repeatFrequency || "none",

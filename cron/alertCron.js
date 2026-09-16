@@ -35,7 +35,7 @@ let isProcessingAlerts = false;
 //           console.log(`⚠️ [Alert-Cron] SKIP: Alert ${alert._id} deleted or inactive`);
 //           continue;
 //         }
-        
+
 //         // Simple double trigger check using lastTriggered
 //         // Prevent re-triggering within 30s (guards against same-tick duplicates without blocking 1-min custom intervals)
 //         if (alert.lastTriggered && (now - alert.lastTriggered) < 30 * 1000) {
@@ -188,44 +188,55 @@ export const initAlertCron = () => {
 
           // =========================
           // 🔁 REPEAT LOGIC
+          // 🔥 FIX: Check repeatFrequency FIRST — repeatDaily flag is legacy fallback
+          // Without this fix, custom 180-min reminders with repeatDaily:true
+          // were getting +24h instead of +3h because repeatDaily was checked first
           // =========================
-          if (alert.repeatDaily) {
+          if (alert.repeatFrequency === "daily") {
             nextScheduledTime = new Date(
               alert.scheduledDateTime.getTime() + 24 * 60 * 60 * 1000
             );
             alert.scheduledDateTime = nextScheduledTime;
             alert.date = nextScheduledTime;
-          } 
+          }
           else if (alert.repeatFrequency === "1 min" || alert.repeatFrequency === "1_min") {
             nextScheduledTime = new Date(now.getTime() + 60 * 1000);
             alert.scheduledDateTime = nextScheduledTime;
-          } 
+          }
           else if (alert.repeatFrequency === "custom" && alert.repeatMetadata?.customIntervalMinutes) {
             const intervalMs = alert.repeatMetadata.customIntervalMinutes * 60 * 1000;
             nextScheduledTime = new Date(now.getTime() + intervalMs);
             nextScheduledTime.setMilliseconds(0);
             alert.scheduledDateTime = nextScheduledTime;
-          } 
+          }
           else if (alert.repeatFrequency === "weekly") {
             nextScheduledTime = new Date(
               alert.scheduledDateTime.getTime() + 7 * 24 * 60 * 60 * 1000
             );
             alert.scheduledDateTime = nextScheduledTime;
             alert.date = nextScheduledTime;
-          } 
+          }
           else if (alert.repeatFrequency === "monthly") {
             const nextDate = new Date(alert.scheduledDateTime);
             nextDate.setMonth(nextDate.getMonth() + 1);
             nextScheduledTime = nextDate;
             alert.scheduledDateTime = nextDate;
             alert.date = nextDate;
-          } 
+          }
           else if (alert.repeatFrequency === "hourly") {
             nextScheduledTime = new Date(
               alert.scheduledDateTime.getTime() + 60 * 60 * 1000
             );
             alert.scheduledDateTime = nextScheduledTime;
-          } 
+          }
+          else if (alert.repeatDaily) {
+            // 🔥 Legacy fallback: repeatDaily flag with no specific repeatFrequency
+            nextScheduledTime = new Date(
+              alert.scheduledDateTime.getTime() + 24 * 60 * 60 * 1000
+            );
+            alert.scheduledDateTime = nextScheduledTime;
+            alert.date = nextScheduledTime;
+          }
           else {
             // ❌ One-time alert
             alert.isActive = false;
