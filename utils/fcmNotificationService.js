@@ -1,68 +1,88 @@
 import admin from "../config/firebase.js";
 import Employee from "../models/employeeSchema.js";
 import Admin from "../models/adminAuthSchema.js";
-
-
-
+import { pruneInvalidFcmToken } from "./sendNotification.js";
 
 export const sendEmployeeDueReminderNotification = async (employeeId, reminderData) => {
   try {
     const employee = await Employee.findById(employeeId);
 
-    if (!employee || !employee.fcmToken) {
+    if (!employee) {
+      console.log(`❌ [FCM-Fail] Employee ${employeeId} not found`);
+      return { success: false, message: "Employee not found" };
+    }
+
+    const tokens = employee.fcmTokens?.length
+      ? employee.fcmTokens.map(t => t.token || t).filter(Boolean)
+      : (employee.fcmToken ? [employee.fcmToken] : []);
+
+    if (!tokens.length) {
       console.log(`❌ [FCM-Fail] Employee ${employeeId} (${employee?.name || 'Unknown'}) - FCM token missing`);
       return { success: false, message: "FCM token not found" };
     }
 
     const { reminderId, title, clientName, phone, location, note, reminderTime } = reminderData;
-    console.log(`🔔 [FCM-Prep] Preparing due reminder for ${employee.name} | Title: ${title}`);
+    console.log(`🔔 [FCM-Prep] Preparing due reminder for ${employee.name} on ${tokens.length} device(s) | Title: ${title}`);
 
     const notifTitle = `⏰ ${title || 'Reminder Due'}`;
     const notifBody = clientName ? `${clientName} - Reminder is due now` : 'Your scheduled reminder is due';
 
-    const message = {
-      token: employee.fcmToken,
-      // Data-Only payload: background JS handler fires notifee.
-      // Notice there is NO 'notification' object here.
-      data: {
-        type: "employee_due_reminder",
-        reminderId: String(reminderId || ""),
-        title: String(title || "⏰ Reminder Due"),
-        body: String(notifBody),
-        clientName: String(clientName || "N/A"),
-        employeeName: "Reminder",
-        createdBy: "Reminder Bot",
-        phone: String(phone || "N/A"),
-        location: String(location || "N/A"),
-        note: String(note || ""),
-        reminderTime: String(reminderTime || ""),
-        timestamp: String(Date.now())
-      },
-      android: {
-        priority: "high",
-        ttl: 86400 // 🔥 24 hours. Don't drop immediately!
-      },
-      apns: {
-        payload: {
-          aps: {
-            contentAvailable: true,
-            sound: "default",
-            badge: 1
-          }
+    const sendPromises = tokens.map(async (token) => {
+      const message = {
+        token: token,
+        data: {
+          type: "employee_due_reminder",
+          reminderId: String(reminderId || ""),
+          title: String(title || "⏰ Reminder Due"),
+          body: String(notifBody),
+          clientName: String(clientName || "N/A"),
+          employeeName: "Reminder",
+          createdBy: "Reminder Bot",
+          phone: String(phone || "N/A"),
+          location: String(location || "N/A"),
+          note: String(note || ""),
+          reminderTime: String(reminderTime || ""),
+          timestamp: String(Date.now())
         },
-        headers: {
-          "apns-priority": "10",
-          "apns-expiration": "86400" // 🔥 24 hours.
+        android: {
+          priority: "high",
+          ttl: 86400 // 🔥 24 hours. Don't drop immediately!
+        },
+        apns: {
+          payload: {
+            aps: {
+              contentAvailable: true,
+              sound: "default",
+              badge: 1
+            }
+          },
+          headers: {
+            "apns-priority": "10",
+            "apns-expiration": "86400" // 🔥 24 hours.
+          }
         }
+      };
+
+      try {
+        const response = await admin.messaging().send(message);
+        console.log(`✅ [FCM-Success] Message sent to ${employee.name} device ${token.substring(0, 15)}...: ${response}`);
+        return { success: true, token, response };
+      } catch (err) {
+        console.error(`❌ [FCM-Error] Message failed for ${employee.name} token ${token.substring(0, 15)}...:`, err.message);
+        if (
+          err.code === 'messaging/registration-token-not-registered' ||
+          err.code === 'messaging/invalid-registration-token'
+        ) {
+          await pruneInvalidFcmToken(token);
+        }
+        return { success: false, token, error: err.message };
       }
-    };
+    });
 
-    console.log(`🚀 [FCM-Send] Sending Data-Only push to ${employee.name}...`);
-    const response = await admin.messaging().send(message);
-    console.log(`✅ [FCM-Success] Message sent to ${employee.name}: ${response}`);
+    const results = await Promise.allSettled(sendPromises);
+    const successful = results.filter(r => r.status === "fulfilled" && r.value.success);
 
-    return { success: true, messageId: response };
-
+    return { success: successful.length > 0, deliveredCount: successful.length, total: tokens.length };
   } catch (error) {
     console.error("❌ [FCM-Critical-Error] sendEmployeeDueReminderNotification failed:", error.message);
     if (error.code) console.error("   Error Code:", error.code);
@@ -161,7 +181,9 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
     // Only fetched if notifySuperAdmins = true (i.e., employee has adminReminderPopupEnabled = true)
     // When false → prevents super-admin from getting spammed for EVERY employee's reminder
     const admins = notifySuperAdmins
-      ? await Admin.find({ fcmToken: { $exists: true, $ne: "" } })
+      ? await Admin.find({
+          $or: [{ "fcmTokens.0": { $exists: true } }, { fcmToken: { $exists: true, $ne: "" } }]
+        }).select("fullName email fcmToken fcmTokens")
       : [];
 
     if (!notifySuperAdmins) {
@@ -169,13 +191,12 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
     }
 
     // 2️⃣ Sub-admins from Employee collection with giveAdminAccess
-
     //    If targetEmployeeId is provided, only include sub-admins who manage that employee
     let subAdminTargets = [];
     const subAdminQuery = {
       giveAdminAccess: true,
       isActive: true,
-      fcmToken: { $exists: true, $ne: "" }
+      $or: [{ "fcmTokens.0": { $exists: true } }, { fcmToken: { $exists: true, $ne: "" } }]
     };
 
     if (targetEmployeeId) {
@@ -192,7 +213,7 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
       }
     }
 
-    subAdminTargets = await Employee.find(subAdminQuery).select('name email fcmToken');
+    subAdminTargets = await Employee.find(subAdminQuery).select('name email fcmToken fcmTokens');
 
     if ((!admins || admins.length === 0) && subAdminTargets.length === 0) {
       console.log(`❌ No admins found with FCM tokens`);
@@ -204,47 +225,58 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
 
     // Prevent double-notification if the employee is also the sub-admin/admin
     // ONLY if we are excluding the target (preventing self-notification on creation)
-    if (excludeTarget && targetEmployeeId && employeeData.fcmToken) {
-      seenTokens.add(employeeData.fcmToken);
+    if (excludeTarget && targetEmployeeId) {
+      if (employeeData.fcmTokens?.length) {
+        employeeData.fcmTokens.forEach(t => seenTokens.add(typeof t === 'string' ? t : t?.token));
+      }
+      if (employeeData.fcmToken) {
+        seenTokens.add(employeeData.fcmToken);
+      }
     }
 
-    const uniqueAdmins = admins.filter(a => {
-      // 🔥 CRITICAL: Skip if it's the SAME device or SAME person (by email)
-      const tokenMatch = (excludeTarget && employeeData?.fcmToken && a.fcmToken === employeeData.fcmToken);
+    const allTargets = [];
+
+    // Process super-admins
+    for (const a of admins) {
       const emailMatch = (excludeTarget && employeeData?.employeeEmail && a.email?.toLowerCase() === employeeData.employeeEmail.toLowerCase());
-
-      if (tokenMatch || emailMatch) {
-        console.log(`[FCM-DEBUG] Skipping admin ${a.email} because they are the assignee (Match: ${tokenMatch ? 'token' : 'email'})`);
-        return false;
+      if (emailMatch) {
+        console.log(`[FCM-DEBUG] Skipping admin ${a.email} because they are the assignee (Match: email)`);
+        continue;
       }
 
-      if (seenTokens.has(a.fcmToken)) return false;
-      seenTokens.add(a.fcmToken);
-      return true;
-    });
+      const userTokens = a.fcmTokens?.length
+        ? a.fcmTokens.map(t => t.token || t).filter(Boolean)
+        : (a.fcmToken ? [a.fcmToken] : []);
 
-    const uniqueSubAdmins = subAdminTargets.filter(sa => {
-      // 🔥 Same for subadmins
-      const tokenMatch = (excludeTarget && employeeData?.fcmToken && sa.fcmToken === employeeData.fcmToken);
+      for (const tok of userTokens) {
+        if (!tok || seenTokens.has(tok)) continue;
+        seenTokens.add(tok);
+        allTargets.push({ email: a.email, fcmToken: tok, type: 'admin' });
+      }
+    }
+
+    // Process sub-admins
+    for (const sa of subAdminTargets) {
       const emailMatch = (excludeTarget && employeeData?.employeeEmail && sa.email?.toLowerCase() === employeeData.employeeEmail.toLowerCase());
-
-      if (tokenMatch || emailMatch) {
-        console.log(`[FCM-DEBUG] Skipping subadmin ${sa.email} because they are the assignee (Match: ${tokenMatch ? 'token' : 'email'})`);
-        return false;
+      if (emailMatch) {
+        console.log(`[FCM-DEBUG] Skipping subadmin ${sa.email} because they are the assignee (Match: email)`);
+        continue;
       }
 
-      if (seenTokens.has(sa.fcmToken)) return false;
-      seenTokens.add(sa.fcmToken);
-      return true;
-    });
-    const allTargets = [
-      ...uniqueAdmins.map(a => ({ email: a.email, fcmToken: a.fcmToken, type: 'admin' })),
-      ...uniqueSubAdmins.map(sa => ({ email: sa.email, fcmToken: sa.fcmToken, type: 'subadmin' })),
-    ];
+      const userTokens = sa.fcmTokens?.length
+        ? sa.fcmTokens.map(t => t.token || t).filter(Boolean)
+        : (sa.fcmToken ? [sa.fcmToken] : []);
+
+      for (const tok of userTokens) {
+        if (!tok || seenTokens.has(tok)) continue;
+        seenTokens.add(tok);
+        allTargets.push({ email: sa.email, fcmToken: tok, type: 'subadmin' });
+      }
+    }
 
     console.log(`[FCM-DEBUG] sendAdminReminderNotification called | excludeTarget: ${excludeTarget} | targetEmployeeId: ${targetEmployeeId}`);
     console.log(`[FCM-DEBUG] Initial counts: admins=${admins.length}, subAdmins=${subAdminTargets.length}`);
-    console.log(`[FCM-DEBUG] Unique targets count: ${allTargets.length}`);
+    console.log(`[FCM-DEBUG] Unique target tokens count: ${allTargets.length}`);
     allTargets.forEach((t, i) => {
       console.log(`   [Target ${i + 1}] Type: ${t.type} | Email: ${t.email} | Token: ${t.fcmToken.substring(0, 20)}...`);
     });
@@ -314,15 +346,13 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
         return { success: true, email: target.email, messageId: response };
       } catch (error) {
         console.error(`❌ FCM error for ${target.type} ${target.email}:`, error.code);
-        if (error.code === 'messaging/registration-token-not-registered' ||
-          error.code === 'messaging/invalid-registration-token') {
-          // Clear invalid token from the right model
-          if (target.type === 'admin') {
-            await Admin.updateOne({ fcmToken: target.fcmToken }, { $set: { fcmToken: '' } });
-          } else {
-            await Employee.updateOne({ fcmToken: target.fcmToken }, { $set: { fcmToken: '' } });
-          }
-          console.log(`⚠️ Cleared invalid FCM token for ${target.type} ${target.email}`);
+        if (
+          error.code === 'messaging/registration-token-not-registered' ||
+          error.code === 'messaging/invalid-registration-token'
+        ) {
+          // Selective prune of dead token & primary fcmToken re-sync
+          await pruneInvalidFcmToken(target.fcmToken);
+          console.log(`⚠️ Pruned invalid FCM token for ${target.type} ${target.email}`);
         }
         return { success: false, email: target.email, error: error.code };
       }

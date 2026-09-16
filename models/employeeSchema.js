@@ -68,11 +68,20 @@ const employeeSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Employee'
   }],
-  // FCM Token for push notifications
+  // FCM Token for push notifications (Primary / backward-compatible token)
   fcmToken: {
     type: String,
     default: ""
   },
+  fcmTokens: [
+    {
+      token: { type: String, required: true },
+      deviceId: { type: String, default: "" },
+      deviceInfo: { type: String, default: "" },
+      lastLogin: { type: Date, default: Date.now },
+      updatedAt: { type: Date, default: Date.now },
+    },
+  ],
   joinDate: {
     type: Date,
     default: Date.now

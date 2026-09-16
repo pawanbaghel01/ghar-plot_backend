@@ -1,5 +1,7 @@
 import cron from "node-cron";
 import Alert from "../models/alertSchema.js";
+import Admin from "../models/adminAuthSchema.js";
+import Employee from "../models/employeeSchema.js";
 import { sendPushNotification } from "../utils/sendNotification.js";
 
 let isProcessingAlerts = false;
@@ -246,59 +248,88 @@ export const initAlertCron = () => {
           await alert.save();
 
           // =========================
-          // 📤 PUSH NOTIFICATION
+          // 📤 PUSH NOTIFICATION (Multi-device dynamic recipient resolution)
           // =========================
-          await sendPushNotification(
-            alert.fcmToken,
-            alert.title || (isReminder ? "New Reminder" : "New Alert"),
-            alert.reason || (isReminder ? "Your reminder triggered" : "Your alert triggered"),
-            {
-              type: "admin_reminder",
-
-              alertId: alert._id.toString(),
-              title: alert.title || "",
-              body: alert.reason || "",
-
-              reminderTitle: alert.title || "",
-              note: alert.reason || "",
-
-              // ✅ Fields used by sendPushNotification template (were empty before)
-              reason: alert.reason || "",
-              date: alert.date ? new Date(alert.date).toISOString().split('T')[0] : "",
-              time: alert.time || "",
-              scheduledDateTime: alert.scheduledDateTime
-                ? new Date(alert.scheduledDateTime).toISOString()
-                : scheduledAt || "",
-
-              // ✅ CURRENT TIME
-              scheduledAt: scheduledAt,
-
-              // ✅ NEXT TIME (IMPORTANT)
-              nextScheduledAt: nextScheduledTime
-                ? nextScheduledTime.toISOString()
-                : "",
-
-              repeatFrequency: alert.repeatFrequency || "none",
-              repeatDaily: String(alert.repeatDaily || false),
-              repeatMetadata: typeof alert.repeatMetadata === 'object' ? JSON.stringify(alert.repeatMetadata) : String(alert.repeatMetadata || ""),
-              customRepeatMinutes: String(alert.repeatMetadata?.customIntervalMinutes || alert.customIntervalMinutes || alert.customRepeatMinutes || alert.repeatInterval || ""),
-              customIntervalMinutes: String(alert.repeatMetadata?.customIntervalMinutes || alert.customIntervalMinutes || alert.customRepeatMinutes || alert.repeatInterval || ""),
-
-              category: alert.category || "alert",
-
-              // navigation
-              screen: isReminder ? "EditReminderScreen" : "EditAlertScreen",
-              deepLink: isReminder
-                ? "gharplot://editReminder"
-                : "gharplot://editAlert",
-
-              // extra
-              isDue: "true",
-              timestamp: String(Date.now())
+          let recipientTokens = [];
+          if (alert.userId) {
+            try {
+              const adminUser = await Admin.findById(alert.userId).select("fcmTokens fcmToken");
+              if (adminUser) {
+                recipientTokens = adminUser.fcmTokens?.length
+                  ? adminUser.fcmTokens.map(t => t.token || t)
+                  : (adminUser.fcmToken ? [adminUser.fcmToken] : []);
+              } else {
+                const empUser = await Employee.findById(alert.userId).select("fcmTokens fcmToken");
+                if (empUser) {
+                  recipientTokens = empUser.fcmTokens?.length
+                    ? empUser.fcmTokens.map(t => t.token || t)
+                    : (empUser.fcmToken ? [empUser.fcmToken] : []);
+                }
+              }
+            } catch (userLookupErr) {
+              console.warn("⚠️ [Alert-Cron] User token lookup failed, falling back to alert.fcmToken:", userLookupErr.message);
             }
-          );
+          }
 
-          console.log(`✅ Notification sent: ${alert.title}`);
+          // Fallback to stored alert.fcmToken if no user tokens found
+          if (!recipientTokens.length && alert.fcmToken) {
+            recipientTokens = [alert.fcmToken];
+          }
+
+          if (recipientTokens.length > 0) {
+            await sendPushNotification(
+              recipientTokens,
+              alert.title || (isReminder ? "New Reminder" : "New Alert"),
+              alert.reason || (isReminder ? "Your reminder triggered" : "Your alert triggered"),
+              {
+                type: "admin_reminder",
+
+                alertId: alert._id.toString(),
+                title: alert.title || "",
+                body: alert.reason || "",
+
+                reminderTitle: alert.title || "",
+                note: alert.reason || "",
+
+                // ✅ Fields used by sendPushNotification template (were empty before)
+                reason: alert.reason || "",
+                date: alert.date ? new Date(alert.date).toISOString().split('T')[0] : "",
+                time: alert.time || "",
+                scheduledDateTime: alert.scheduledDateTime
+                  ? new Date(alert.scheduledDateTime).toISOString()
+                  : scheduledAt || "",
+
+                // ✅ CURRENT TIME
+                scheduledAt: scheduledAt,
+
+                // ✅ NEXT TIME (IMPORTANT)
+                nextScheduledAt: nextScheduledTime
+                  ? nextScheduledTime.toISOString()
+                  : "",
+
+                repeatFrequency: alert.repeatFrequency || "none",
+                repeatDaily: String(alert.repeatDaily || false),
+                repeatMetadata: typeof alert.repeatMetadata === 'object' ? JSON.stringify(alert.repeatMetadata) : String(alert.repeatMetadata || ""),
+                customRepeatMinutes: String(alert.repeatMetadata?.customIntervalMinutes || alert.customIntervalMinutes || alert.customRepeatMinutes || alert.repeatInterval || ""),
+                customIntervalMinutes: String(alert.repeatMetadata?.customIntervalMinutes || alert.customIntervalMinutes || alert.customRepeatMinutes || alert.repeatInterval || ""),
+
+                category: alert.category || "alert",
+
+                // navigation
+                screen: isReminder ? "EditReminderScreen" : "EditAlertScreen",
+                deepLink: isReminder
+                  ? "gharplot://editReminder"
+                  : "gharplot://editAlert",
+
+                // extra
+                isDue: "true",
+                timestamp: String(Date.now())
+              }
+            );
+            console.log(`✅ Notification sent to ${recipientTokens.length} device(s): ${alert.title}`);
+          } else {
+            console.warn(`⚠️ [Alert-Cron] No active FCM tokens found for alert: ${alert.title}`);
+          }
         } catch (err) {
           console.error("❌ Error processing alert:", err.message);
         }

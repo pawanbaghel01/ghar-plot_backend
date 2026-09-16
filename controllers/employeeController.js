@@ -329,7 +329,7 @@ export const updateEmployeePassword = async (req, res) => {
 // Employee login
 export const employeeLogin = async (req, res) => {
   try {
-    const { email, password, fcmToken } = req.body;
+    const { email, password, fcmToken, deviceId, deviceInfo } = req.body;
 
     // Check if employee exists and is active
     const employee = await Employee.findOne({ email, isActive: true })
@@ -359,18 +359,59 @@ export const employeeLogin = async (req, res) => {
       });
     }
 
-    // Update last login and FCM token if provided
-    const updateData = { lastLogin: Date.now() };
-    if (fcmToken) {
-      updateData.fcmToken = fcmToken;
-      console.log(`✅ FCM token updated for employee ${employee._id}`);
-    }
-    await Employee.findByIdAndUpdate(employee._id, updateData);
+    // Update last login timestamp
+    employee.lastLogin = new Date();
 
-    // Update employee object with new fcmToken for response
+    // Update multi-device FCM session if fcmToken provided (Actual Login Event)
     if (fcmToken) {
-      employee.fcmToken = fcmToken;
+      if ((!employee.fcmTokens || employee.fcmTokens.length === 0) && employee.fcmToken) {
+        employee.fcmTokens = [{
+          token: employee.fcmToken,
+          deviceId: "",
+          deviceInfo: "",
+          lastLogin: employee.lastLogin || new Date(),
+          updatedAt: new Date()
+        }];
+      }
+      if (!employee.fcmTokens) employee.fcmTokens = [];
+
+      const currentDeviceId = deviceId || "";
+      const currentDeviceInfo = deviceInfo || req.headers["user-agent"] || "";
+
+      let existingIndex = -1;
+      if (currentDeviceId) {
+        existingIndex = employee.fcmTokens.findIndex(e => e.deviceId && e.deviceId === currentDeviceId);
+      }
+      if (existingIndex === -1) {
+        existingIndex = employee.fcmTokens.findIndex(e => e.token === fcmToken);
+      }
+
+      if (existingIndex !== -1) {
+        employee.fcmTokens[existingIndex].token = fcmToken;
+        employee.fcmTokens[existingIndex].lastLogin = new Date();
+        employee.fcmTokens[existingIndex].updatedAt = new Date();
+        if (currentDeviceId) employee.fcmTokens[existingIndex].deviceId = currentDeviceId;
+        if (currentDeviceInfo) employee.fcmTokens[existingIndex].deviceInfo = currentDeviceInfo;
+      } else {
+        employee.fcmTokens.push({
+          token: fcmToken,
+          deviceId: currentDeviceId,
+          deviceInfo: currentDeviceInfo,
+          lastLogin: new Date(),
+          updatedAt: new Date()
+        });
+      }
+
+      // Sort strictly by lastLogin descending to maintain latest 2 devices
+      employee.fcmTokens.sort((a, b) => new Date(b.lastLogin || 0) - new Date(a.lastLogin || 0));
+      employee.fcmTokens = employee.fcmTokens.slice(0, 2);
+
+      // Primary token is the latest active device
+      employee.fcmToken = employee.fcmTokens[0].token;
+      console.log(`✅ FCM token & multi-device session updated on login for employee ${employee._id} (${employee.fcmTokens.length} active devices)`);
     }
+
+    await employee.save();
 
     // Generate JWT token
     const token = jwt.sign(

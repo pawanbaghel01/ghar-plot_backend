@@ -36,7 +36,7 @@ export const initReminderCron = (io) => {
           { status: 'snoozed', snoozedUntil: { $lte: now } },
           { isRepeating: true, nextTrigger: { $lte: now } }
         ]
-      }).populate('employeeId', 'name email fcmToken adminReminderPopupEnabled');
+      }).populate('employeeId', 'name email fcmToken fcmTokens adminReminderPopupEnabled');
 
       console.log(`📋 [Cron] Found ${reminders.length} reminders in DB that match query`);
       let triggerCount = 0, skipCount = 0;
@@ -225,10 +225,13 @@ export const initReminderCron = (io) => {
                 reminderTime: r.reminderDateTime
               });
 
-              // 🔑 Fetch LATEST fcmToken from DB for correct dedup
+              // 🔑 Fetch LATEST fcmTokens & fcmToken from DB for correct dedup
               // (cron's populate may have stale token if employee refreshed it)
               const freshEmployee = await (await import('../models/employeeSchema.js')).default
-                .findById(assigneeId).select('fcmToken email name');
+                .findById(assigneeId).select('fcmToken fcmTokens email name');
+              const latestFcmTokens = freshEmployee?.fcmTokens?.length
+                ? freshEmployee.fcmTokens.map(t => t.token || t)
+                : (freshEmployee?.fcmToken ? [freshEmployee.fcmToken] : (r.employeeId.fcmToken ? [r.employeeId.fcmToken] : []));
               const latestFcmToken = freshEmployee?.fcmToken || r.employeeId.fcmToken;
               const latestEmail = freshEmployee?.email || r.employeeId.email;
 
@@ -252,7 +255,8 @@ export const initReminderCron = (io) => {
                 {
                   employeeName: r.employeeId.name,
                   employeeEmail: latestEmail,
-                  fcmToken: latestFcmToken
+                  fcmToken: latestFcmToken,
+                  fcmTokens: latestFcmTokens
                 },
                 assigneeId,
                 true,            // excludeTarget = true (never notify the employee themselves)

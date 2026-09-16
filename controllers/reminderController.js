@@ -623,20 +623,31 @@ export const createReminder = async (req, res) => {
         const admin = (await import('firebase-admin')).default;
         const Admin = (await import('../models/adminAuthSchema.js')).default;
 
-        // 1. Get all unique admin tokens
-        const adminUsers = await Admin.find({ fcmToken: { $exists: true, $ne: "" } });
+        // 1. Get all unique admin tokens (including all active devices)
+        const adminUsers = await Admin.find({
+          $or: [{ "fcmTokens.0": { $exists: true } }, { fcmToken: { $exists: true, $ne: "" } }]
+        });
         const subAdmins = await Employee.find({
           giveAdminAccess: true,
           managedEmployees: employeeId,
-          fcmToken: { $exists: true, $ne: "" }
+          $or: [{ "fcmTokens.0": { $exists: true } }, { fcmToken: { $exists: true, $ne: "" } }]
         });
 
         const tokens = new Set();
-        adminUsers.forEach(a => tokens.add(a.fcmToken));
-        subAdmins.forEach(sa => tokens.add(sa.fcmToken));
+        adminUsers.forEach(a => {
+          const list = a.fcmTokens?.length ? a.fcmTokens.map(t => t.token || t).filter(Boolean) : (a.fcmToken ? [a.fcmToken] : []);
+          list.forEach(t => tokens.add(t));
+        });
+        subAdmins.forEach(sa => {
+          const list = sa.fcmTokens?.length ? sa.fcmTokens.map(t => t.token || t).filter(Boolean) : (sa.fcmToken ? [sa.fcmToken] : []);
+          list.forEach(t => tokens.add(t));
+        });
 
-        // Remove employee's own token from the list
-        if (employee.fcmToken) tokens.delete(employee.fcmToken);
+        // Remove employee's own tokens from the list
+        const empTokens = employee.fcmTokens?.length
+          ? employee.fcmTokens.map(t => t.token || t).filter(Boolean)
+          : (employee.fcmToken ? [employee.fcmToken] : []);
+        empTokens.forEach(t => tokens.delete(t));
 
         console.log(`[Direct-FCM] Sending to ${tokens.size} unique admin devices`);
 
