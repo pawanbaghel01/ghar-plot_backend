@@ -98,8 +98,7 @@ employeeSchema.pre('save', function (next) {
   next();
 });
 
-// Index for faster queries
-employeeSchema.index({ email: 1 });
+// Index for faster queries (email already has unique index)
 employeeSchema.index({ role: 1 });
 employeeSchema.index({ isActive: 1 });
 

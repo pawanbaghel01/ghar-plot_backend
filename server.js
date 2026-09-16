@@ -106,6 +106,19 @@ app.use((req, res, next) => {
 
 
 
+// Root / Health check route for Render
+app.get("/", (req, res) => {
+  res.status(200).json({
+    status: "success",
+    message: "Ghar-Plot Backend API is running live!",
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.head("/", (req, res) => {
+  res.status(200).end();
+});
+
 //  API Routes
 app.use("/auth", router);
 app.use("/property", addRouter);
