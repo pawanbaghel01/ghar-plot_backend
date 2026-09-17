@@ -901,7 +901,7 @@ export const getAlerts = async (req, res) => {
                   next = new Date(next.getTime() + 24 * 60 * 60 * 1000);
                 }
                 nextScheduledAt = next.toISOString();
-              } else if ((freq === "custom" || customMins > 0) && customMins > 0) {
+              } else if (freq === "custom" && customMins > 0) {
                 const intervalMs = customMins * 60 * 1000;
                 let next = new Date(baseMs);
                 while (next.getTime() <= nowMs) {
@@ -1187,24 +1187,27 @@ export const editAlert = async (req, res) => {
       alert.reason = reason;
     }
 
+    if (repeatFrequency !== undefined) {
+      alert.repeatFrequency = repeatFrequency;
+      if (repeatFrequency === 'daily') {
+        alert.repeatDaily = true;
+      } else if (repeatFrequency === 'none') {
+        alert.repeatDaily = false;
+      }
+      // If repeatFrequency is not 'custom', clear any stale customIntervalMinutes from metadata
+      if (repeatFrequency !== 'custom' && alert.repeatMetadata?.customIntervalMinutes !== undefined) {
+        alert.repeatMetadata = null;
+      }
+    }
+
     if (repeatDaily !== undefined) {
       alert.repeatDaily = repeatDaily;
     }
 
-    if (isActive !== undefined) {
-      alert.isActive = isActive;
-    }
-
-    if (category !== undefined) {
-      alert.category = category;
-    }
-
-    if (repeatFrequency !== undefined) {
-      alert.repeatFrequency = repeatFrequency;
-    }
-
     if (repeatMetadata !== undefined) {
       alert.repeatMetadata = repeatMetadata;
+    } else if (repeatFrequency !== undefined && repeatFrequency !== 'custom' && !['weekly', 'monthly', 'yearly'].includes(repeatFrequency)) {
+      alert.repeatMetadata = null;
     }
 
     // 🔥 Update FCM Token

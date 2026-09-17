@@ -1168,7 +1168,12 @@ export const updateReminder = async (req, res) => {
     }
     
     if (isRepeating !== undefined) reminder.isRepeating = isRepeating;
-    if (repeatType !== undefined) reminder.repeatType = repeatType;
+    if (repeatType !== undefined) {
+      reminder.repeatType = repeatType;
+      if (repeatType !== 'custom' && !String(repeatType).includes('min')) {
+        reminder.customRepeatMinutes = 0;
+      }
+    }
     if (isActive !== undefined) reminder.isActive = isActive;
 
     // Add to edit history if content changed
