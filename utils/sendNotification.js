@@ -96,11 +96,20 @@ export const sendPushNotification = async (
 
   const period = getPeriod(data.nextScheduledAt);
 
+  const isAlert = String(data.category || data.type || "").toLowerCase().includes("alert");
+  const channelId = isAlert ? "gharplot_alerts" : "admin_reminders";
+  const notifTitle = title || (isAlert ? "New Alert" : "New Reminder");
+  const notifBody = body || "You have a new message";
+
   const buildMessageForToken = (token) => ({
     token: token,
+    notification: {
+      title: notifTitle,
+      body: notifBody,
+    },
     data: {
-      title: title || "New Alert",
-      body: body || "You have a new message",
+      title: notifTitle,
+      body: notifBody,
       deepLink: data.deepLink || "gharplot://editAlert",
       screen: data.screen || "EditAlertScreen",
       alertId: data.alertId || "",
@@ -112,16 +121,30 @@ export const sendPushNotification = async (
       repeatDaily: String(data.repeatDaily ?? false),
       repeatFrequency: data.repeatFrequency || "none",
       nextScheduledAt: data.nextScheduledAt || "",
-      category: data.category || "alert",
+      category: data.category || (isAlert ? "alert" : "reminder"),
       click_action: "FLUTTER_NOTIFICATION_CLICK"
     },
     android: {
       priority: "high",
+      notification: {
+        channelId: channelId,
+        sound: "default",
+        priority: "max",
+        visibility: "public",
+        defaultSound: true,
+        defaultVibratePattern: true,
+        clickAction: "FLUTTER_NOTIFICATION_CLICK"
+      }
     },
     apns: {
       payload: {
         aps: {
+          alert: {
+            title: notifTitle,
+            body: notifBody,
+          },
           sound: "default",
+          badge: 1,
           "content-available": 1
         }
       }

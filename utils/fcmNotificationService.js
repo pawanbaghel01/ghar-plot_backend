@@ -30,6 +30,10 @@ export const sendEmployeeDueReminderNotification = async (employeeId, reminderDa
     const sendPromises = tokens.map(async (token) => {
       const message = {
         token: token,
+        notification: {
+          title: String(notifTitle),
+          body: String(notifBody),
+        },
         data: {
           type: "employee_due_reminder",
           reminderId: String(reminderId || ""),
@@ -46,11 +50,23 @@ export const sendEmployeeDueReminderNotification = async (employeeId, reminderDa
         },
         android: {
           priority: "high",
-          ttl: 86400 // 🔥 24 hours. Don't drop immediately!
+          ttl: 86400, // 🔥 24 hours. Don't drop immediately!
+          notification: {
+            channelId: "enquiry_reminders",
+            sound: "default",
+            priority: "max",
+            visibility: "public",
+            defaultSound: true,
+            defaultVibratePattern: true,
+          }
         },
         apns: {
           payload: {
             aps: {
+              alert: {
+                title: String(notifTitle),
+                body: String(notifBody),
+              },
               contentAvailable: true,
               sound: "default",
               badge: 1
@@ -299,9 +315,10 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
     const sendPromises = allTargets.map(async (target) => {
       const message = {
         token: target.fcmToken,
-
-        // 🔥 DATA-ONLY payload (like employee_due_reminder)
-        // No 'notification' object - App's FCM handler will use Notifee for INDIGO theme
+        notification: {
+          title: String(notificationTitle),
+          body: String(notificationBody),
+        },
         data: {
           type: "admin_reminder",
           reminderId: String(_id || reminderData.reminderId || ""),
@@ -322,12 +339,24 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
 
         android: {
           priority: "high",
-          ttl: 86400 // 24 hours (same as employee reminder)
+          ttl: 86400, // 24 hours (same as employee reminder)
+          notification: {
+            channelId: "admin_reminders",
+            sound: "default",
+            priority: "max",
+            visibility: "public",
+            defaultSound: true,
+            defaultVibratePattern: true,
+          }
         },
 
         apns: {
           payload: {
             aps: {
+              alert: {
+                title: String(notificationTitle),
+                body: String(notificationBody),
+              },
               contentAvailable: true,
               sound: "default",
               badge: 1
