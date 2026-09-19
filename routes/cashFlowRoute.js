@@ -20,16 +20,13 @@ router.get("/", getAllCashFlows);
 // GET single cash flow record by ID
 router.get("/:id", getCashFlowById);
 
-// All write operations require admin token verification
-router.use(verifyAdminToken);
-
-// POST create cash flow
+// POST create or settle cash flow (Admin and Employees can assign cash)
 router.post("/", createCashFlow);
 
 // PUT update cash flow
 router.put("/:id", updateCashFlow);
 
-// DELETE cash flow
-router.delete("/:id", deleteCashFlow);
+// DELETE cash flow requires admin
+router.delete("/:id", verifyAdminToken, deleteCashFlow);
 
 export default router;

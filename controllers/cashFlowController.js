@@ -79,15 +79,45 @@ export const createCashFlow = async (req, res) => {
     endOfDay.setUTCHours(23, 59, 59, 999);
 
     // Check if a cash flow record already exists for this associate on this date
-    const existing = await CashFlow.findOne({
+    let cashFlow = await CashFlow.findOne({
       businessAssociate,
       date: { $gte: startOfDay, $lte: endOfDay },
     });
 
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: "A cash flow entry already exists for this business associate on this date",
+    // If existing record exists, settle and append new cash entries into it
+    if (cashFlow) {
+      if (entries && Array.isArray(entries) && entries.length > 0) {
+        cashFlow.entries.push(...entries);
+      }
+
+      // If opening balance was explicitly provided and existing was 0, update it
+      if (openingBalance !== undefined && openingBalance !== null && !isNaN(parseFloat(openingBalance))) {
+        if ((cashFlow.openingBalance || 0) === 0 && parseFloat(openingBalance) > 0) {
+          cashFlow.openingBalance = parseFloat(openingBalance);
+        }
+      }
+
+      // Re-calculate today's total expenses from Expense collection
+      const dailyExpenses = await Expense.find({
+        businessAssociate,
+        date: { $gte: startOfDay, $lte: endOfDay },
+      });
+      cashFlow.totalExpense = dailyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+      await cashFlow.save();
+
+      // Recalculate forward cash flows
+      await cascadeRecalculate(businessAssociate, endOfDay);
+
+      const populated = await cashFlow.populate([
+        { path: "businessAssociate", select: "name email phone department" },
+        { path: "createdBy", select: "name email" },
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: "Cash Flow entry settled and merged with existing associate record successfully",
+        data: populated,
       });
     }
 
