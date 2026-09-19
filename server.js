@@ -177,6 +177,7 @@ app.use("/employee/clients", clientRoute);
 app.use("/admin/projects", projectRoute);
 app.use("/employee/projects", projectRoute);
 app.use("/admin/cashflows", cashFlowRoute);
+app.use("/employee/cashflows", cashFlowRoute);
 app.use("/admin/expenses", expenseRoute);
 app.use("/employee/expenses", expenseRoute);
 
