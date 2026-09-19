@@ -115,6 +115,7 @@ export const createExpense = async (req, res) => {
       itemName,
       quantity,
       unit,
+      unitPrice,
       amount,
       paidTo,
       date,
@@ -122,10 +123,16 @@ export const createExpense = async (req, res) => {
       remarks,
     } = req.body;
 
-    if (!project || !businessAssociate || !category || amount === undefined || !paidTo || !date) {
+    const parsedQty = parseFloat(quantity) || 1;
+    const parsedUnitPrice = parseFloat(unitPrice) || 0;
+    const parsedAmount = (amount !== undefined && amount !== null && amount !== '')
+      ? parseFloat(amount)
+      : (parsedQty * parsedUnitPrice);
+
+    if (!project || !businessAssociate || !category || (amount === undefined && unitPrice === undefined) || !paidTo || !date) {
       return res.status(400).json({
         success: false,
-        message: "project, businessAssociate, category, amount, paidTo, and date are required.",
+        message: "project, businessAssociate, category, amount or unitPrice, paidTo, and date are required.",
       });
     }
 
@@ -158,9 +165,10 @@ export const createExpense = async (req, res) => {
       businessAssociate,
       category: category.trim(),
       itemName: itemName ? itemName.trim() : "",
-      quantity: parseFloat(quantity) || 1,
+      quantity: parsedQty,
       unit: unit ? unit.trim() : "Pcs",
-      amount: parseFloat(amount) || 0,
+      unitPrice: parsedUnitPrice || (parsedQty > 0 ? (parsedAmount / parsedQty) : 0),
+      amount: parsedAmount,
       paidTo: paidTo.trim(),
       date: expenseDate,
       paymentType: paymentType || "Cash",
@@ -420,6 +428,7 @@ export const createBatchExpenses = async (req, res) => {
         itemName,
         quantity,
         unit,
+        unitPrice,
         amount,
         paidTo,
         date,
@@ -427,7 +436,13 @@ export const createBatchExpenses = async (req, res) => {
         remarks,
       } = item;
 
-      if (!project || !businessAssociate || !category || amount === undefined || !paidTo) {
+      const parsedQty = parseFloat(quantity) || 1;
+      const parsedUnitPrice = parseFloat(unitPrice) || 0;
+      const parsedAmount = (amount !== undefined && amount !== null && amount !== '')
+        ? parseFloat(amount)
+        : (parsedQty * parsedUnitPrice);
+
+      if (!project || !businessAssociate || !category || (amount === undefined && unitPrice === undefined) || !paidTo) {
         continue;
       }
 
@@ -443,9 +458,10 @@ export const createBatchExpenses = async (req, res) => {
         businessAssociate,
         category: category.trim(),
         itemName: itemName ? itemName.trim() : "",
-        quantity: parseFloat(quantity) || 1,
+        quantity: parsedQty,
         unit: unit ? unit.trim() : "Pcs",
-        amount: parseFloat(amount) || 0,
+        unitPrice: parsedUnitPrice || (parsedQty > 0 ? (parsedAmount / parsedQty) : 0),
+        amount: parsedAmount,
         paidTo: paidTo.trim(),
         date: expenseDate,
         paymentType: paymentType || "Cash",

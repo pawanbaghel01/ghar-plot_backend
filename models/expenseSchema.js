@@ -36,6 +36,10 @@ const expenseSchema = new mongoose.Schema(
       trim: true,
       default: "Pcs",
     },
+    unitPrice: {
+      type: Number,
+      default: 0,
+    },
     amount: {
       type: Number,
       required: true,

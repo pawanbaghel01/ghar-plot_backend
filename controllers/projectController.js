@@ -47,10 +47,19 @@ export const createProject = async (req, res) => {
       });
     }
 
+    let normalizedStatus = status || "Active";
+    if (normalizedStatus.toLowerCase() === "inactive") {
+      normalizedStatus = "Inactive";
+    } else if (normalizedStatus.toLowerCase() === "complete" || normalizedStatus.toLowerCase() === "completed") {
+      normalizedStatus = "Completed";
+    } else {
+      normalizedStatus = "Active";
+    }
+
     const project = await Project.create({
       projectName: projectName.trim(),
       client: resolvedClientId,
-      status: status || "Active",
+      status: normalizedStatus,
     });
 
     const populated = await project.populate({
@@ -155,7 +164,17 @@ export const updateProject = async (req, res) => {
       }
       updateFields.client = resolvedClientId;
     }
-    if (status !== undefined) updateFields.status = status;
+    if (status !== undefined) {
+      let normalizedStatus = status;
+      if (normalizedStatus.toLowerCase() === "inactive") {
+        normalizedStatus = "Inactive";
+      } else if (normalizedStatus.toLowerCase() === "complete" || normalizedStatus.toLowerCase() === "completed") {
+        normalizedStatus = "Completed";
+      } else {
+        normalizedStatus = "Active";
+      }
+      updateFields.status = normalizedStatus;
+    }
 
     const updated = await Project.findByIdAndUpdate(id, updateFields, {
       new: true,
