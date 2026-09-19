@@ -5,10 +5,14 @@ import {
   getCashFlowById,
   updateCashFlow,
   deleteCashFlow,
+  getPreviousClosingBalance,
 } from "../controllers/cashFlowController.js";
 import { verifyAdminToken } from "../middlewares/adminAuthMiddleware.js";
 
 const router = express.Router();
+
+// GET previous day's closing balance for associate
+router.get("/opening-balance/:associateId", getPreviousClosingBalance);
 
 // GET all cash flow records - public / standard auth as per client/project routes
 router.get("/", getAllCashFlows);

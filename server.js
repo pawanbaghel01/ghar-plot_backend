@@ -55,6 +55,7 @@ import clientTypeRoute from "./routes/clientTypeRoute.js";
 import clientRoute from "./routes/clientRoute.js";
 import projectRoute from "./routes/projectRoute.js";
 import cashFlowRoute from "./routes/cashFlowRoute.js";
+import expenseRoute from "./routes/expenseRoute.js";
 // Load environment variables
 dotenv.config();
 
@@ -172,8 +173,12 @@ app.use("/admin/reminders", adminReminderRoute);
 app.use("/api/config", appConfigRoutes); 
 app.use("/api/client-types", clientTypeRoute);
 app.use("/admin/clients", clientRoute);
+app.use("/employee/clients", clientRoute);
 app.use("/admin/projects", projectRoute);
+app.use("/employee/projects", projectRoute);
 app.use("/admin/cashflows", cashFlowRoute);
+app.use("/admin/expenses", expenseRoute);
+app.use("/employee/expenses", expenseRoute);
 
 //  Socket.io Setup
 const server = createServer(app);

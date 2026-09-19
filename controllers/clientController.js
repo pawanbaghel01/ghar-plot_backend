@@ -1,6 +1,7 @@
 import Client from "../models/clientSchema.js";
 import ClientType from "../models/clientTypeSchema.js";
 import Employee from "../models/employeeSchema.js";
+import User from "../models/user.js";
 
 const VALID_STATUSES = ["New", "Follow Up", "Converted", "Closed", "Lost"];
 
@@ -120,10 +121,41 @@ export const getAllClients = async (req, res) => {
       .populate({ path: "propertySellerType", select: "name category" })
       .sort({ createdAt: -1 });
 
+    let finalClients = [...clients];
+
+    // Include registered App Users if includeUsers is not 'false'
+    if (req.query.includeUsers !== "false") {
+      const existingPhones = new Set(clients.map((c) => c.contactNumber).filter(Boolean));
+      const userFilter = {};
+      if (search) {
+        userFilter.$or = [
+          { fullName: { $regex: search, $options: "i" } },
+          { phone: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ];
+      }
+      const users = await User.find(userFilter).select("fullName phone email city state createdAt");
+      const mappedUsers = users
+        .filter((u) => u.phone && !existingPhones.has(u.phone))
+        .map((u) => ({
+          _id: u._id,
+          name: u.fullName,
+          contactNumber: u.phone,
+          email: u.email,
+          comments: "Registered App User",
+          clientType: { _id: "app_user", name: "App User", category: "clientType" },
+          status: "Active",
+          isRegisteredUser: true,
+          createdAt: u.createdAt,
+        }));
+
+      finalClients = [...finalClients, ...mappedUsers];
+    }
+
     return res.status(200).json({
       success: true,
-      count: clients.length,
-      data: clients,
+      count: finalClients.length,
+      data: finalClients,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

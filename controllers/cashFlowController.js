@@ -1,5 +1,48 @@
 import CashFlow from "../models/cashFlowSchema.js";
 import Employee from "../models/employeeSchema.js";
+import Expense from "../models/expenseSchema.js";
+import { cascadeRecalculate } from "./expenseController.js";
+
+// ─── GET PREVIOUS DAY'S CLOSING BALANCE (FOR AUTO OPENING BALANCE) ────────────
+export const getPreviousClosingBalance = async (req, res) => {
+  try {
+    const { associateId } = req.params;
+    const { date } = req.query;
+
+    if (!associateId) {
+      return res.status(400).json({ success: false, message: "associateId is required" });
+    }
+
+    const targetDate = date ? new Date(date) : new Date();
+    const startOfTarget = new Date(targetDate);
+    startOfTarget.setUTCHours(0, 0, 0, 0);
+
+    // Find the latest CashFlow record strictly before this date
+    const prevCashFlow = await CashFlow.findOne({
+      businessAssociate: associateId,
+      date: { $lt: startOfTarget },
+    }).sort({ date: -1 });
+
+    if (prevCashFlow) {
+      return res.status(200).json({
+        success: true,
+        openingBalance: prevCashFlow.closingBalance || 0,
+        previousDate: prevCashFlow.date,
+        isInitial: false,
+      });
+    }
+
+    // If no previous record found, return 0 (initial record)
+    return res.status(200).json({
+      success: true,
+      openingBalance: 0,
+      previousDate: null,
+      isInitial: true,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 // ─── CREATE CASH FLOW ──────────────────────────────────────────────────────────
 export const createCashFlow = async (req, res) => {
@@ -30,12 +73,12 @@ export const createCashFlow = async (req, res) => {
       });
     }
 
-    // Check if a cash flow record already exists for this businessAssociate on this calendar date
     const startOfDay = new Date(targetDate);
     startOfDay.setUTCHours(0, 0, 0, 0);
     const endOfDay = new Date(targetDate);
     endOfDay.setUTCHours(23, 59, 59, 999);
 
+    // Check if a cash flow record already exists for this associate on this date
     const existing = await CashFlow.findOne({
       businessAssociate,
       date: { $gte: startOfDay, $lte: endOfDay },
@@ -48,15 +91,38 @@ export const createCashFlow = async (req, res) => {
       });
     }
 
+    // Fetch previous closing balance if openingBalance is not explicitly provided or 0
+    let finalOpeningBalance = openingBalance !== undefined ? parseFloat(openingBalance) : 0;
+    if (openingBalance === undefined || openingBalance === null) {
+      const prev = await CashFlow.findOne({
+        businessAssociate,
+        date: { $lt: startOfDay },
+      }).sort({ date: -1 });
+      if (prev) {
+        finalOpeningBalance = prev.closingBalance || 0;
+      }
+    }
+
+    // Check total expenses for this associate on this date
+    const dailyExpenses = await Expense.find({
+      businessAssociate,
+      date: { $gte: startOfDay, $lte: endOfDay },
+    });
+    const totalExpense = dailyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
     const cashFlow = new CashFlow({
       businessAssociate,
       date: targetDate,
-      openingBalance: openingBalance !== undefined ? openingBalance : 0,
+      openingBalance: finalOpeningBalance,
       entries: entries || [],
+      totalExpense,
       createdBy: req.user?._id,
     });
 
     await cashFlow.save();
+
+    // Recalculate forward cash flows if this was an older date entry
+    await cascadeRecalculate(businessAssociate, endOfDay);
 
     const populated = await cashFlow.populate([
       { path: "businessAssociate", select: "name email phone department" },
@@ -103,10 +169,29 @@ export const getAllCashFlows = async (req, res) => {
       ])
       .sort({ date: -1, createdAt: -1 });
 
+    // Sync each row's totalExpense with Expense collection dynamically
+    const results = await Promise.all(
+      cashFlows.map(async (cf) => {
+        const startOfDay = new Date(cf.date);
+        startOfDay.setUTCHours(0, 0, 0, 0);
+        const endOfDay = new Date(cf.date);
+        endOfDay.setUTCHours(23, 59, 59, 999);
+
+        const expensesCount = await Expense.countDocuments({
+          businessAssociate: cf.businessAssociate?._id || cf.businessAssociate,
+          date: { $gte: startOfDay, $lte: endOfDay },
+        });
+
+        const cfObj = cf.toObject();
+        cfObj.expenseCount = expensesCount;
+        return cfObj;
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      count: cashFlows.length,
-      data: cashFlows,
+      count: results.length,
+      data: results,
     });
   } catch (error) {
     return res.status(500).json({
@@ -160,7 +245,6 @@ export const updateCashFlow = async (req, res) => {
     }
 
     if (businessAssociate !== undefined) {
-      // Validate businessAssociate exists
       const employeeExists = await Employee.findById(businessAssociate);
       if (!employeeExists) {
         return res.status(404).json({
@@ -183,15 +267,29 @@ export const updateCashFlow = async (req, res) => {
     }
 
     if (openingBalance !== undefined) {
-      cashFlow.openingBalance = openingBalance;
+      cashFlow.openingBalance = parseFloat(openingBalance) || 0;
     }
 
     if (entries !== undefined) {
       cashFlow.entries = entries;
     }
 
-    // Save will trigger the pre-save hook to calculate totalReceived and closingBalance
+    // Re-verify expenses on this date
+    const startOfDay = new Date(cashFlow.date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(cashFlow.date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const dailyExpenses = await Expense.find({
+      businessAssociate: cashFlow.businessAssociate,
+      date: { $gte: startOfDay, $lte: endOfDay },
+    });
+    cashFlow.totalExpense = dailyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
     await cashFlow.save();
+
+    // Recalculate forward
+    await cascadeRecalculate(cashFlow.businessAssociate, endOfDay);
 
     const populated = await cashFlow.populate([
       { path: "businessAssociate", select: "name email phone department" },
@@ -224,7 +322,13 @@ export const deleteCashFlow = async (req, res) => {
       });
     }
 
+    const { businessAssociate, date } = cashFlow;
     await CashFlow.findByIdAndDelete(id);
+
+    // Cascade recalculate forward cash flows
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    await cascadeRecalculate(businessAssociate, endOfDay);
 
     return res.status(200).json({
       success: true,

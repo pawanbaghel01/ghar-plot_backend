@@ -1,5 +1,30 @@
 import Project from "../models/projectSchema.js";
 import Client from "../models/clientSchema.js";
+import User from "../models/user.js";
+
+// Helper to resolve client: checks Client collection, if not found checks User collection and auto-syncs
+const resolveClientOrUser = async (clientIdOrUserId) => {
+  let clientDoc = await Client.findById(clientIdOrUserId);
+  if (clientDoc) return clientDoc._id;
+
+  // Check if it's a registered User
+  const userDoc = await User.findById(clientIdOrUserId);
+  if (userDoc) {
+    // Check if Client already exists with this phone
+    let existingClient = await Client.findOne({ contactNumber: userDoc.phone });
+    if (!existingClient) {
+      existingClient = await Client.create({
+        name: userDoc.fullName,
+        contactNumber: userDoc.phone,
+        comments: "Auto-synced from registered user",
+        status: "Converted",
+      });
+    }
+    return existingClient._id;
+  }
+
+  return null;
+};
 
 // ─── CREATE ────────────────────────────────────────────────────────────────────
 export const createProject = async (req, res) => {
@@ -13,18 +38,18 @@ export const createProject = async (req, res) => {
       });
     }
 
-    // Validate client exists
-    const clientExists = await Client.findById(client);
-    if (!clientExists) {
+    // Validate client or user exists
+    const resolvedClientId = await resolveClientOrUser(client);
+    if (!resolvedClientId) {
       return res.status(404).json({
         success: false,
-        message: "Client not found",
+        message: "Client or registered user not found",
       });
     }
 
     const project = await Project.create({
       projectName: projectName.trim(),
-      client,
+      client: resolvedClientId,
       status: status || "Active",
     });
 
@@ -121,15 +146,14 @@ export const updateProject = async (req, res) => {
     const updateFields = {};
     if (projectName !== undefined) updateFields.projectName = projectName.trim();
     if (client !== undefined) {
-      // Validate client exists
-      const clientExists = await Client.findById(client);
-      if (!clientExists) {
+      const resolvedClientId = await resolveClientOrUser(client);
+      if (!resolvedClientId) {
         return res.status(404).json({
           success: false,
-          message: "Client not found",
+          message: "Client or registered user not found",
         });
       }
-      updateFields.client = client;
+      updateFields.client = resolvedClientId;
     }
     if (status !== undefined) updateFields.status = status;
 

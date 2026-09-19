@@ -54,6 +54,10 @@ const cashFlowSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  totalExpense: {
+    type: Number,
+    default: 0,
+  },
   closingBalance: {
     type: Number,
     default: 0,
@@ -82,7 +86,10 @@ cashFlowSchema.pre("save", function (next) {
     0
   );
 
-  this.closingBalance = this.openingBalance + this.totalReceived;
+  this.closingBalance =
+    (this.openingBalance || 0) +
+    this.totalReceived -
+    (this.totalExpense || 0);
 
   next();
 });
