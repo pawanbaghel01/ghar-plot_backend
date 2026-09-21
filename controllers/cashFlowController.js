@@ -2,6 +2,7 @@ import CashFlow from "../models/cashFlowSchema.js";
 import Employee from "../models/employeeSchema.js";
 import Expense from "../models/expenseSchema.js";
 import { cascadeRecalculate } from "./expenseController.js";
+import { ensureTodayCashFlowsExist } from "../cron/dailyCashFlowCron.js";
 
 // ─── GET PREVIOUS DAY'S CLOSING BALANCE (FOR AUTO OPENING BALANCE) ────────────
 export const getPreviousClosingBalance = async (req, res) => {
@@ -92,7 +93,7 @@ export const createCashFlow = async (req, res) => {
 
       // If opening balance was explicitly provided and existing was 0, update it
       if (openingBalance !== undefined && openingBalance !== null && !isNaN(parseFloat(openingBalance))) {
-        if ((existingCashFlow.openingBalance || 0) === 0 && parseFloat(openingBalance) > 0) {
+        if ((existingCashFlow.openingBalance || 0) === 0 && parseFloat(openingBalance) !== 0) {
           existingCashFlow.openingBalance = parseFloat(openingBalance);
         }
       }
@@ -175,6 +176,9 @@ export const createCashFlow = async (req, res) => {
 // ─── GET ALL CASH FLOWS ────────────────────────────────────────────────────────
 export const getAllCashFlows = async (req, res) => {
   try {
+    // Ensure today's auto cash flow entries exist for active employees
+    await ensureTodayCashFlowsExist();
+
     const { businessAssociate, startDate, endDate } = req.query;
 
     const filter = {};
