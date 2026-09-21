@@ -176,8 +176,10 @@ export const createCashFlow = async (req, res) => {
 // ─── GET ALL CASH FLOWS ────────────────────────────────────────────────────────
 export const getAllCashFlows = async (req, res) => {
   try {
-    // Ensure today's auto cash flow entries exist for active employees
-    await ensureTodayCashFlowsExist();
+    // Ensure today's auto cash flow entries exist for active employees in background without blocking response
+    ensureTodayCashFlowsExist().catch((err) =>
+      console.error("[DailyCashFlow] Background auto-entry check error:", err)
+    );
 
     const { businessAssociate, startDate, endDate } = req.query;
 
@@ -203,24 +205,38 @@ export const getAllCashFlows = async (req, res) => {
       ])
       .sort({ date: -1, createdAt: -1 });
 
-    // Sync each row's totalExpense with Expense collection dynamically
-    const results = await Promise.all(
-      cashFlows.map(async (cf) => {
-        const startOfDay = new Date(cf.date);
-        startOfDay.setUTCHours(0, 0, 0, 0);
-        const endOfDay = new Date(cf.date);
-        endOfDay.setUTCHours(23, 59, 59, 999);
+    // Efficiently compute expense count with a single aggregation instead of N queries
+    let countMap = new Map();
+    try {
+      const expenseCounts = await Expense.aggregate([
+        {
+          $group: {
+            _id: {
+              businessAssociate: "$businessAssociate",
+              date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+      for (const ec of expenseCounts) {
+        if (ec._id?.businessAssociate && ec._id?.date) {
+          countMap.set(`${ec._id.businessAssociate.toString()}_${ec._id.date}`, ec.count);
+        }
+      }
+    } catch (aggErr) {
+      console.warn("[CashFlow] Aggregate expense count error:", aggErr.message);
+    }
 
-        const expensesCount = await Expense.countDocuments({
-          businessAssociate: cf.businessAssociate?._id || cf.businessAssociate,
-          date: { $gte: startOfDay, $lte: endOfDay },
-        });
-
-        const cfObj = cf.toObject();
-        cfObj.expenseCount = expensesCount;
-        return cfObj;
-      })
-    );
+    const results = cashFlows.map((cf) => {
+      const cfObj = cf.toObject();
+      const assocId = cf.businessAssociate?._id
+        ? cf.businessAssociate._id.toString()
+        : cf.businessAssociate?.toString();
+      const dateStr = cf.date ? new Date(cf.date).toISOString().split("T")[0] : "";
+      cfObj.expenseCount = countMap.get(`${assocId}_${dateStr}`) || 0;
+      return cfObj;
+    });
 
     return res.status(200).json({
       success: true,
