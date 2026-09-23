@@ -505,6 +505,10 @@ export const createAlert = async (req, res) => {
       console.log(`📅 [CreateAlert] date=${date}, time=${time} → UTC: ${calculatedScheduledDateTime.toISOString()}`);
     }
 
+    // Determine strict repeatFrequency and repeatDaily
+    const finalRepeatFrequency = repeatFrequency || (repeatDaily ? "daily" : "none");
+    const finalRepeatDaily = finalRepeatFrequency === "daily";
+
     // Create new alert
     const newAlert = new Alert({
       userId,
@@ -512,10 +516,10 @@ export const createAlert = async (req, res) => {
       date: new Date(date),
       time,
       reason,
-      repeatDaily: repeatDaily || false,
+      repeatDaily: finalRepeatDaily,
       isActive: isActive !== undefined ? isActive : true,
       category: category || "alert",
-      repeatFrequency: repeatFrequency || "none",
+      repeatFrequency: finalRepeatFrequency,
       repeatMetadata: repeatMetadata || null,
       scheduledDateTime: calculatedScheduledDateTime,  // 🔥 Now properly set
       fcmToken: finalFcmToken,  // 🔥 Now uses fallback from user profile
@@ -550,6 +554,9 @@ export const scheduleNotification = async (req, res) => {
       time,
       scheduledDateTime,
       repeatDaily,
+      repeatFrequency,
+      repeatMetadata,
+      customRepeatMinutes,
       notificationType,
       fcmToken
     } = req.body;
@@ -607,7 +614,18 @@ export const scheduleNotification = async (req, res) => {
       alert.date = new Date(alertDate);
       alert.time = alertTime;
       alert.reason = reason;
-      alert.repeatDaily = repeatDaily || false;
+
+      const effectiveFreq = repeatFrequency || alert.repeatFrequency || (repeatDaily ? "daily" : "none");
+      alert.repeatFrequency = effectiveFreq;
+      // STRICT: repeatDaily is TRUE if and ONLY if repeatFrequency is 'daily'
+      alert.repeatDaily = effectiveFreq === "daily";
+
+      if (repeatMetadata !== undefined) {
+        alert.repeatMetadata = repeatMetadata;
+      } else if (customRepeatMinutes) {
+        alert.repeatMetadata = { customIntervalMinutes: Number(customRepeatMinutes) };
+      }
+
       alert.isActive = true;
       if (scheduledDateTime) alert.scheduledDateTime = new Date(scheduledDateTime);
       if (fcmToken) alert.fcmToken = fcmToken;
@@ -622,10 +640,20 @@ export const scheduleNotification = async (req, res) => {
         createdAt: { $gte: new Date(Date.now() - 30 * 1000) }
       }).sort({ createdAt: -1 });
 
+      const effectiveFreq = repeatFrequency || (recentAlert?.repeatFrequency) || (repeatDaily ? "daily" : "none");
+      const effectiveRepeatDaily = effectiveFreq === "daily";
+      let meta = repeatMetadata || (recentAlert?.repeatMetadata) || null;
+      if (!meta && customRepeatMinutes) {
+        meta = { customIntervalMinutes: Number(customRepeatMinutes) };
+      }
+
       if (recentAlert) {
         // Use the recently created alert - just update scheduledDateTime and fcmToken if provided
         console.log(`⚠️ scheduleNotification: Found recently created alert ${recentAlert._id} for "${title}" - using it instead of creating duplicate`);
         alert = recentAlert;
+        alert.repeatFrequency = effectiveFreq;
+        alert.repeatDaily = effectiveRepeatDaily;
+        if (meta) alert.repeatMetadata = meta;
         if (scheduledDateTime) alert.scheduledDateTime = new Date(scheduledDateTime);
         if (fcmToken) alert.fcmToken = fcmToken;
         if (alertDate) alert.date = new Date(alertDate);
@@ -639,7 +667,9 @@ export const scheduleNotification = async (req, res) => {
           date: new Date(alertDate),
           time: alertTime,
           reason,
-          repeatDaily: repeatDaily || false,
+          repeatFrequency: effectiveFreq,
+          repeatDaily: effectiveRepeatDaily,
+          repeatMetadata: meta,
           scheduledDateTime: scheduledDateTime ? new Date(scheduledDateTime) : null,
           fcmToken: fcmToken || null
         });
@@ -1189,24 +1219,18 @@ export const editAlert = async (req, res) => {
 
     if (repeatFrequency !== undefined) {
       alert.repeatFrequency = repeatFrequency;
-      if (repeatFrequency === 'daily') {
-        alert.repeatDaily = true;
-      } else if (repeatFrequency === 'none') {
-        alert.repeatDaily = false;
-      }
-      // If repeatFrequency is not 'custom', clear any stale customIntervalMinutes from metadata
-      if (repeatFrequency !== 'custom' && alert.repeatMetadata?.customIntervalMinutes !== undefined) {
-        alert.repeatMetadata = null;
-      }
+    } else if (repeatDaily !== undefined) {
+      alert.repeatFrequency = (repeatDaily === true || repeatDaily === 'true') ? 'daily' : 'none';
     }
 
-    if (repeatDaily !== undefined) {
-      alert.repeatDaily = repeatDaily;
-    }
+    // STRICT GUARANTEE: repeatDaily is TRUE if and ONLY if repeatFrequency === 'daily'
+    alert.repeatDaily = alert.repeatFrequency === 'daily';
 
     if (repeatMetadata !== undefined) {
       alert.repeatMetadata = repeatMetadata;
-    } else if (repeatFrequency !== undefined && repeatFrequency !== 'custom' && !['weekly', 'monthly', 'yearly'].includes(repeatFrequency)) {
+    } else if (req.body.customRepeatMinutes) {
+      alert.repeatMetadata = { customIntervalMinutes: Number(req.body.customRepeatMinutes) };
+    } else if (alert.repeatFrequency !== 'custom' && !['weekly', 'monthly', 'yearly'].includes(alert.repeatFrequency)) {
       alert.repeatMetadata = null;
     }
 

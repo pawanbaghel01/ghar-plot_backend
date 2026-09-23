@@ -75,14 +75,44 @@ export const sendPushNotification = async (
   const now = new Date();
   const formattedTime = now.toISOString();
 
+  // Helper to format ISO date or time string to IST "h:mm A"
+  const formatTimeIST = (timeInput) => {
+    if (!timeInput) return null;
+    try {
+      const d = new Date(timeInput);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        }).toUpperCase();
+      }
+    } catch (_) {}
+
+    if (typeof timeInput === "string" && timeInput.trim()) {
+      const trimmed = timeInput.trim();
+      if (trimmed.match(/AM|PM/i)) return trimmed.toUpperCase();
+      const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+      if (match) {
+        let h = parseInt(match[1], 10);
+        const m = match[2];
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12 || 12;
+        return `${h}:${m} ${ampm}`;
+      }
+      return trimmed;
+    }
+    return null;
+  };
+
   // 🔥 FIX: Use raw ms diff (timezone-independent) instead of getHours() which is UTC on Render
   const getPeriod = (nextTime) => {
     if (!nextTime) return "";
     const next = new Date(nextTime);
     if (isNaN(next.getTime())) return "";
     const diffMs = next.getTime() - now.getTime();
-    if (diffMs <= 0) return "";
-    const diffMinutes = Math.round(diffMs / 60000);
+    const diffMinutes = Math.max(0, Math.round(diffMs / 60000));
     const hours = Math.floor(diffMinutes / 60);
     const minutes = diffMinutes % 60;
     if (hours > 0 && minutes > 0) {
@@ -94,25 +124,51 @@ export const sendPushNotification = async (
     }
   };
 
-  const period = getPeriod(data.nextScheduledAt);
+  const period = data.period || getPeriod(data.nextScheduledAt);
 
   const isAlert = String(data.category || data.type || "").toLowerCase().includes("alert");
   const channelId = isAlert ? "gharplot_alerts" : "admin_reminders";
   const notifTitle = title || (isAlert ? "New Alert" : "New Reminder");
-  const notifBody = body || "You have a new message";
+  const baseBody = body || "You have a new message";
+
+  // Build rich notification body with scheduled time, next time, and period
+  let richBody = baseBody;
+  if (!richBody.includes("⏰ Scheduled:")) {
+    const scheduledTimeFormatted =
+      formatTimeIST(data.scheduledAt || data.scheduledDateTime) ||
+      (data.time ? formatTimeIST(data.time) : null);
+
+    if (scheduledTimeFormatted) {
+      richBody += ` ⏰ Scheduled: ${scheduledTimeFormatted}`;
+    }
+
+    if (data.nextScheduledAt) {
+      const nextTimeFormatted = formatTimeIST(data.nextScheduledAt);
+      if (nextTimeFormatted) {
+        richBody += ` 🔁 Next: ${nextTimeFormatted}`;
+      }
+      if (period) {
+        richBody += ` ⏳ In ${period}`;
+      }
+    }
+  }
 
   const buildMessageForToken = (token) => ({
     token: token,
     notification: {
       title: notifTitle,
-      body: notifBody,
+      body: richBody,
     },
     data: {
+      type: isAlert ? "alert" : "reminder",
+      notificationType: isAlert ? "alert" : "reminder",
+      category: data.category || (isAlert ? "alert" : "reminder"),
       title: notifTitle,
-      body: notifBody,
+      body: richBody,
       deepLink: data.deepLink || "gharplot://editAlert",
       screen: data.screen || "EditAlertScreen",
-      alertId: data.alertId || "",
+      alertId: String(data.alertId || ""),
+      reminderId: String(data.reminderId || ""),
       reason: data.reason || "",
       date: data.date || "",
       time: data.time || "",
@@ -121,7 +177,6 @@ export const sendPushNotification = async (
       repeatDaily: String(data.repeatDaily ?? false),
       repeatFrequency: data.repeatFrequency || "none",
       nextScheduledAt: data.nextScheduledAt || "",
-      category: data.category || (isAlert ? "alert" : "reminder"),
       click_action: "FLUTTER_NOTIFICATION_CLICK"
     },
     android: {
@@ -132,7 +187,7 @@ export const sendPushNotification = async (
         priority: "max",
         visibility: "public",
         defaultSound: true,
-        defaultVibratePattern: true,
+        defaultVibrateTimings: true,
         clickAction: "FLUTTER_NOTIFICATION_CLICK"
       }
     },
@@ -141,7 +196,7 @@ export const sendPushNotification = async (
         aps: {
           alert: {
             title: notifTitle,
-            body: notifBody,
+            body: richBody,
           },
           sound: "default",
           badge: 1,

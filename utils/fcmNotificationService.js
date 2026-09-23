@@ -57,7 +57,7 @@ export const sendEmployeeDueReminderNotification = async (employeeId, reminderDa
             priority: "max",
             visibility: "public",
             defaultSound: true,
-            defaultVibratePattern: true,
+            defaultVibrateTimings: true,
           }
         },
         apns: {

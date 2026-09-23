@@ -193,22 +193,31 @@ export const initAlertCron = () => {
           // Without this fix, custom 180-min reminders with repeatDaily:true
           // were getting +24h instead of +3h because repeatDaily was checked first
           // =========================
-          if (alert.repeatFrequency === "daily") {
+          const customMins = parseInt(
+            alert.repeatMetadata?.customIntervalMinutes ||
+            alert.repeatMetadata?.customRepeatMinutes ||
+            alert.customIntervalMinutes ||
+            alert.customRepeatMinutes ||
+            alert.repeatInterval ||
+            0
+          );
+
+          if (alert.repeatFrequency === "1 min" || alert.repeatFrequency === "1_min") {
+            nextScheduledTime = new Date(now.getTime() + 60 * 1000);
+            alert.scheduledDateTime = nextScheduledTime;
+          }
+          else if (alert.repeatFrequency === "custom" && customMins > 0) {
+            const intervalMs = customMins * 60 * 1000;
+            nextScheduledTime = new Date(now.getTime() + intervalMs);
+            nextScheduledTime.setMilliseconds(0);
+            alert.scheduledDateTime = nextScheduledTime;
+          }
+          else if (alert.repeatFrequency === "daily") {
             nextScheduledTime = new Date(
               alert.scheduledDateTime.getTime() + 24 * 60 * 60 * 1000
             );
             alert.scheduledDateTime = nextScheduledTime;
             alert.date = nextScheduledTime;
-          }
-          else if (alert.repeatFrequency === "1 min" || alert.repeatFrequency === "1_min") {
-            nextScheduledTime = new Date(now.getTime() + 60 * 1000);
-            alert.scheduledDateTime = nextScheduledTime;
-          }
-          else if (alert.repeatFrequency === "custom" && alert.repeatMetadata?.customIntervalMinutes) {
-            const intervalMs = alert.repeatMetadata.customIntervalMinutes * 60 * 1000;
-            nextScheduledTime = new Date(now.getTime() + intervalMs);
-            nextScheduledTime.setMilliseconds(0);
-            alert.scheduledDateTime = nextScheduledTime;
           }
           else if (alert.repeatFrequency === "weekly") {
             nextScheduledTime = new Date(
@@ -251,6 +260,7 @@ export const initAlertCron = () => {
           }
 
           alert.lastTriggered = now;
+          alert.repeatDaily = alert.repeatFrequency === "daily";
           await alert.save();
 
           // =========================

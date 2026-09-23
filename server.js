@@ -56,6 +56,8 @@ import clientRoute from "./routes/clientRoute.js";
 import projectRoute from "./routes/projectRoute.js";
 import cashFlowRoute from "./routes/cashFlowRoute.js";
 import expenseRoute from "./routes/expenseRoute.js";
+import workStatusRoute from "./routes/workStatusRoute.js";
+import exportRoute from "./routes/exportRoute.js";
 // Load environment variables
 dotenv.config();
 
@@ -180,6 +182,10 @@ app.use("/admin/cashflows", cashFlowRoute);
 app.use("/employee/cashflows", cashFlowRoute);
 app.use("/admin/expenses", expenseRoute);
 app.use("/employee/expenses", expenseRoute);
+app.use("/admin/work-status", workStatusRoute);
+app.use("/employee/work-status", workStatusRoute);
+app.use("/admin/export", exportRoute);
+app.use("/employee/export", exportRoute);
 
 //  Socket.io Setup
 const server = createServer(app);
