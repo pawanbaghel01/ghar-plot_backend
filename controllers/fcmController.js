@@ -1,6 +1,9 @@
 import User from "../models/user.js";
 import Employee from "../models/employeeSchema.js";
 import Admin from "../models/adminAuthSchema.js";
+import Alert from "../models/alertSchema.js";
+import { manageAdminDeviceTokens } from "../utils/deviceTokenHelper.js";
+import jwt from "jsonwebtoken";
 
 //  Save Token Controller for Users
 export const saveToken = async (req, res) => {
@@ -23,76 +26,45 @@ export const saveToken = async (req, res) => {
 //  Save Token Controller for Admins
 export const saveAdminToken = async (req, res) => {
   try {
-    const { adminId, fcmToken, oldToken, deviceId, deviceInfo } = req.body;
+    const { adminId, fcmToken, oldToken, deviceId, deviceInfo, isLoginEvent } = req.body;
 
-    if (!adminId || !fcmToken) {
-      return res.status(400).json({ success: false, message: "Missing adminId or fcmToken" });
+    if (!fcmToken) {
+      return res.status(400).json({ success: false, message: "Missing fcmToken" });
     }
 
-    const admin = await Admin.findById(adminId);
+    let targetAdminId = adminId;
+    if ((!targetAdminId || targetAdminId === "admin") && req.headers.authorization) {
+      try {
+        const token = req.headers.authorization.replace("Bearer ", "");
+        const decoded = jwt.decode(token);
+        if (decoded && (decoded.id || decoded._id)) {
+          targetAdminId = decoded.id || decoded._id;
+        }
+      } catch (_) {}
+    }
+
+    let admin = null;
+    if (typeof targetAdminId === "string" && /^[0-9a-fA-F]{24}$/.test(targetAdminId)) {
+      admin = await Admin.findById(targetAdminId);
+    }
+    if (!admin && targetAdminId && targetAdminId !== "admin") {
+      admin = await Admin.findOne({ email: targetAdminId });
+    }
+    if (!admin) {
+      admin = await Admin.findOne();
+    }
     if (!admin) {
       return res.status(404).json({ success: false, message: "Admin not found" });
     }
 
-    // Initialize fcmTokens if empty but legacy fcmToken exists
-    if ((!admin.fcmTokens || admin.fcmTokens.length === 0) && admin.fcmToken) {
-      admin.fcmTokens = [{
-        token: admin.fcmToken,
-        deviceId: "",
-        deviceInfo: "",
-        lastLogin: admin.updatedAt || new Date(),
-        updatedAt: new Date()
-      }];
-    }
-    if (!admin.fcmTokens) admin.fcmTokens = [];
-
-    // Matching hierarchy for token refresh:
-    // 1. Match by deviceId
-    // 2. Match by oldToken
-    // 3. Match by token === fcmToken
-    let matchedEntry = null;
-    if (deviceId) {
-      matchedEntry = admin.fcmTokens.find(e => e.deviceId && e.deviceId === deviceId);
-    }
-    if (!matchedEntry && oldToken) {
-      matchedEntry = admin.fcmTokens.find(e => e.token === oldToken);
-    }
-    if (!matchedEntry) {
-      matchedEntry = admin.fcmTokens.find(e => e.token === fcmToken);
-    }
-
-    if (matchedEntry) {
-      // Token Refresh on known device: update token and updatedAt WITHOUT changing lastLogin!
-      matchedEntry.token = fcmToken;
-      matchedEntry.updatedAt = new Date();
-      if (deviceId) matchedEntry.deviceId = deviceId;
-      if (deviceInfo) matchedEntry.deviceInfo = deviceInfo;
-    } else {
-      // New device or unregistered token refresh
-      if (admin.fcmTokens.length < 2) {
-        admin.fcmTokens.push({
-          token: fcmToken,
-          deviceId: deviceId || "",
-          deviceInfo: deviceInfo || req.headers["user-agent"] || "",
-          lastLogin: new Date(),
-          updatedAt: new Date()
-        });
-      } else {
-        // Already has 2 devices. Update the second slot (or oldest)
-        admin.fcmTokens.sort((a, b) => new Date(b.lastLogin || 0) - new Date(a.lastLogin || 0));
-        admin.fcmTokens[1].token = fcmToken;
-        admin.fcmTokens[1].updatedAt = new Date();
-        if (deviceId) admin.fcmTokens[1].deviceId = deviceId;
-        if (deviceInfo) admin.fcmTokens[1].deviceInfo = deviceInfo;
-      }
-    }
-
-    // Sort by lastLogin descending to keep priority intact
-    admin.fcmTokens.sort((a, b) => new Date(b.lastLogin || 0) - new Date(a.lastLogin || 0));
-    admin.fcmTokens = admin.fcmTokens.slice(0, 2);
-
-    // Synchronize primary fcmToken to top active device
-    admin.fcmToken = admin.fcmTokens[0].token;
+    await manageAdminDeviceTokens(admin, {
+      fcmToken,
+      oldToken,
+      deviceId,
+      deviceInfo: deviceInfo || req.headers["user-agent"] || "",
+      isLoginEvent: isLoginEvent === true || isLoginEvent === "true",
+      maxDevices: 5,
+    });
 
     await admin.save();
 
@@ -106,7 +78,20 @@ export const saveAdminToken = async (req, res) => {
       { $set: { fcmToken: "" } }
     );
 
-    console.log(`✅ FCM token saved/refreshed for admin ${adminId} (${admin.fcmTokens.length} active devices)`);
+    // Also update all alerts for this admin with the latest FCM token
+    try {
+      const updateResult = await Alert.updateMany(
+        { userId: admin._id },
+        { fcmToken: admin.fcmToken }
+      );
+      if (updateResult.modifiedCount > 0) {
+        console.log(`✅ Updated ${updateResult.modifiedCount} alerts with new FCM token for admin ${admin._id}`);
+      }
+    } catch (alertError) {
+      console.error("Error updating alerts with FCM token:", alertError.message);
+    }
+
+    console.log(`✅ FCM token saved/refreshed for admin ${admin.email || admin._id} (${admin.fcmTokens.length} active devices)`);
 
     res.json({ success: true, message: "Admin token saved successfully", activeDevices: admin.fcmTokens.length });
   } catch (error) {

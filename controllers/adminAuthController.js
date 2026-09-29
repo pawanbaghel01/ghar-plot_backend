@@ -5,6 +5,7 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import Session from "../models/sessionSchema.js";
 import Alert from "../models/alertSchema.js";
+import { manageAdminDeviceTokens } from "../utils/deviceTokenHelper.js";
 
 dotenv.config();
 
@@ -71,50 +72,14 @@ export const loginAdmin = async (req, res) => {
 
     // Update FCM token & device session on login (Actual Login Event)
     if (fcmToken) {
-      if ((!admin.fcmTokens || admin.fcmTokens.length === 0) && admin.fcmToken) {
-        admin.fcmTokens = [{
-          token: admin.fcmToken,
-          deviceId: "",
-          deviceInfo: "",
-          lastLogin: admin.updatedAt || new Date(),
-          updatedAt: new Date()
-        }];
-      }
-      if (!admin.fcmTokens) admin.fcmTokens = [];
+      await manageAdminDeviceTokens(admin, {
+        fcmToken,
+        deviceId,
+        deviceInfo: deviceInfo || req.headers["user-agent"] || "",
+        isLoginEvent: true,
+        maxDevices: 5,
+      });
 
-      const currentDeviceId = deviceId || "";
-      const currentDeviceInfo = deviceInfo || req.headers["user-agent"] || "";
-
-      let existingIndex = -1;
-      if (currentDeviceId) {
-        existingIndex = admin.fcmTokens.findIndex(e => e.deviceId && e.deviceId === currentDeviceId);
-      }
-      if (existingIndex === -1) {
-        existingIndex = admin.fcmTokens.findIndex(e => e.token === fcmToken);
-      }
-
-      if (existingIndex !== -1) {
-        admin.fcmTokens[existingIndex].token = fcmToken;
-        admin.fcmTokens[existingIndex].lastLogin = new Date();
-        admin.fcmTokens[existingIndex].updatedAt = new Date();
-        if (currentDeviceId) admin.fcmTokens[existingIndex].deviceId = currentDeviceId;
-        if (currentDeviceInfo) admin.fcmTokens[existingIndex].deviceInfo = currentDeviceInfo;
-      } else {
-        admin.fcmTokens.push({
-          token: fcmToken,
-          deviceId: currentDeviceId,
-          deviceInfo: currentDeviceInfo,
-          lastLogin: new Date(),
-          updatedAt: new Date()
-        });
-      }
-
-      // Sort strictly by lastLogin descending to maintain latest 2 devices
-      admin.fcmTokens.sort((a, b) => new Date(b.lastLogin || 0) - new Date(a.lastLogin || 0));
-      admin.fcmTokens = admin.fcmTokens.slice(0, 2);
-
-      // Primary fcmToken is always the latest active token
-      admin.fcmToken = admin.fcmTokens[0].token;
       await admin.save();
       console.log(`✅ FCM token & multi-device session updated on login for admin ${admin._id} (${admin.fcmTokens.length} active devices)`);
 
