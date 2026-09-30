@@ -1244,7 +1244,7 @@ export const deleteReminder = async (req, res) => {
       });
     }
 
-    if (reminder.employeeId.toString() !== employeeId.toString()) {
+    if (req.user?.role !== 'admin' && reminder.employeeId?.toString() !== employeeId?.toString()) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to delete this reminder"

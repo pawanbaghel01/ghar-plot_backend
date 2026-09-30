@@ -558,9 +558,31 @@ export const scheduleNotification = async (req, res) => {
       repeatMetadata,
       customRepeatMinutes,
       notificationType,
-      fcmToken
+      fcmToken,
+      assignedEmployeeId,
+      enquiryId,
+      clientName,
+      phone
     } = req.body;
     const userId = req.user.id;
+
+    // Auto-resolve assignedEmployeeId from enquiry if not provided directly
+    let finalAssignedEmpId = assignedEmployeeId || null;
+    if (!finalAssignedEmpId && enquiryId) {
+      try {
+        const LeadAssignment = (await import("../models/leadAssignmentSchema.js")).default;
+        const assignment = await LeadAssignment.findOne({
+          enquiryId,
+          status: { $in: ['active', 'pending', 'in-progress'] }
+        });
+        if (assignment?.employeeId) {
+          finalAssignedEmpId = assignment.employeeId;
+          console.log(`🔍 [ScheduleNotification] Auto-resolved assigned employee ${finalAssignedEmpId} for enquiry ${enquiryId}`);
+        }
+      } catch (e) {
+        console.warn("⚠️ [ScheduleNotification] Error auto-resolving assignment:", e.message);
+      }
+    }
 
     // Validate required fields
     if (!reason) {
@@ -629,6 +651,10 @@ export const scheduleNotification = async (req, res) => {
       alert.isActive = true;
       if (scheduledDateTime) alert.scheduledDateTime = new Date(scheduledDateTime);
       if (fcmToken) alert.fcmToken = fcmToken;
+      if (finalAssignedEmpId) alert.assignedEmployeeId = finalAssignedEmpId;
+      if (enquiryId) alert.enquiryId = enquiryId;
+      if (clientName) alert.clientName = clientName;
+      if (phone) alert.phone = phone;
 
       await alert.save();
     } else {
@@ -658,6 +684,10 @@ export const scheduleNotification = async (req, res) => {
         if (fcmToken) alert.fcmToken = fcmToken;
         if (alertDate) alert.date = new Date(alertDate);
         if (alertTime) alert.time = alertTime;
+        if (finalAssignedEmpId) alert.assignedEmployeeId = finalAssignedEmpId;
+        if (enquiryId) alert.enquiryId = enquiryId;
+        if (clientName) alert.clientName = clientName;
+        if (phone) alert.phone = phone;
         await alert.save();
       } else {
         // No recent alert exists - safe to create new one
@@ -671,7 +701,11 @@ export const scheduleNotification = async (req, res) => {
           repeatDaily: effectiveRepeatDaily,
           repeatMetadata: meta,
           scheduledDateTime: scheduledDateTime ? new Date(scheduledDateTime) : null,
-          fcmToken: fcmToken || null
+          fcmToken: fcmToken || null,
+          assignedEmployeeId: finalAssignedEmpId || null,
+          enquiryId: enquiryId || null,
+          clientName: clientName || "",
+          phone: phone || ""
         });
         await alert.save();
       }

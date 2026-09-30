@@ -248,3 +248,6 @@ import { initAlertCron } from "./cron/alertCron.js";
 initAlertCron();
 import { initDailyCashFlowCron } from "./cron/dailyCashFlowCron.js";
 initDailyCashFlowCron();
+import { initUSPReminderCron } from "./cron/uspReminderCron.js";
+initUSPReminderCron(io);
+

@@ -346,6 +346,61 @@ export const initAlertCron = () => {
           } else {
             console.warn(`⚠️ [Alert-Cron] No active FCM tokens found for alert: ${alert.title}`);
           }
+
+          // ==========================================
+          // 2️⃣ STRICT: SEND TO ASSIGNED EMPLOYEE
+          // ==========================================
+          let targetEmpId = alert.assignedEmployeeId;
+          if (!targetEmpId && alert.enquiryId) {
+            try {
+              const LeadAssignment = (await import("../models/leadAssignmentSchema.js")).default;
+              const assignment = await LeadAssignment.findOne({
+                enquiryId: alert.enquiryId,
+                status: { $in: ['active', 'pending', 'in-progress'] }
+              });
+              if (assignment?.employeeId) {
+                targetEmpId = assignment.employeeId;
+              }
+            } catch (err) {
+              console.warn("⚠️ [Alert-Cron] Error auto-resolving assignment for enquiry:", err.message);
+            }
+          }
+
+          if (targetEmpId) {
+            try {
+              const { sendEmployeeDueReminderNotification } = await import("../utils/fcmNotificationService.js");
+              console.log(`📤 [Alert-Cron] Delivering reminder push to Assigned Employee ID: ${targetEmpId}`);
+              await sendEmployeeDueReminderNotification(targetEmpId, {
+                reminderId: alert._id.toString(),
+                title: alert.title || "Reminder Due",
+                clientName: alert.clientName || "",
+                phone: alert.phone || "",
+                location: "Enquiry Reminder",
+                note: alert.reason || "",
+                reminderTime: alert.scheduledDateTime || now
+              });
+
+              // Create in-app Notification for the assigned employee
+              const Notification = (await import("../models/notificationModel.js")).default;
+              const empNotif = new Notification({
+                title: alert.title || "⏰ Reminder Due",
+                message: alert.reason || `Follow up for ${alert.clientName || 'enquiry'}`,
+                type: 'employee_due_reminder',
+                priority: 'high',
+                metadata: {
+                  reminderId: alert._id,
+                  employeeId: targetEmpId,
+                  clientName: alert.clientName || "",
+                  phone: alert.phone || "",
+                  reminderTime: alert.scheduledDateTime || now
+                }
+              });
+              await empNotif.save();
+              console.log(`✅ [Alert-Cron] In-app notification saved for assigned employee ${targetEmpId}`);
+            } catch (empNotifErr) {
+              console.error("❌ [Alert-Cron] Failed to send notification to assigned employee:", empNotifErr.message);
+            }
+          }
         } catch (err) {
           console.error("❌ Error processing alert:", err.message);
         }

@@ -48,6 +48,66 @@ const uspEmployeeSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Ownership: which Admin or Employee created this USP entry
+    createdByAdmin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    createdByEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
+    // Target Employee who should receive this reminder
+    assignedEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
+    // Reminder & Scheduling
+    reminderTitle: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    scheduledDate: {
+      type: Date,
+      default: null,
+    },
+    scheduledTime: {
+      type: String,
+      default: "",
+    },
+    scheduledDateTime: {
+      type: Date,
+      default: null,
+    },
+    scheduleType: {
+      type: String,
+      enum: ["one_time", "recurring", "follow_up"],
+      default: "one_time",
+    },
+    repeatType: {
+      type: String,
+      default: "none", // none, daily, weekly, monthly, custom
+    },
+    customDurationMinutes: {
+      type: Number,
+      default: 0,
+    },
+    isReminderActive: {
+      type: Boolean,
+      default: false,
+    },
+    cronFired: {
+      type: Boolean,
+      default: false,
+    },
+    lastTriggered: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

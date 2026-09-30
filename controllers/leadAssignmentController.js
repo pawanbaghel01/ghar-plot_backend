@@ -129,6 +129,63 @@ export const assignLeadsToEmployee = async (req, res) => {
       }
     }
 
+    if (assignments.length > 0) {
+      try {
+        const freshEmp = await Employee.findById(employeeId).select("name email fcmToken fcmTokens");
+        if (freshEmp) {
+          const empTokens = freshEmp.fcmTokens?.length
+            ? freshEmp.fcmTokens.map(t => t.token || t).filter(Boolean)
+            : (freshEmp.fcmToken ? [freshEmp.fcmToken] : []);
+          
+          const notifTitle = "📋 New Leads Assigned";
+          const notifBody = `${assignments.length} new lead${assignments.length > 1 ? 's have' : ' has'} been assigned to you.`;
+
+          if (empTokens.length > 0) {
+            const { sendPushNotification } = await import("../utils/sendNotification.js");
+            await sendPushNotification(
+              empTokens,
+              notifTitle,
+              notifBody,
+              {
+                type: "lead_assignment",
+                title: notifTitle,
+                body: notifBody,
+                assignmentCount: String(assignments.length),
+                timestamp: String(Date.now()),
+                screen: "EmployeeLeadsScreen"
+              }
+            );
+            console.log(`✅ [LeadAssignment] Push notification sent to employee ${freshEmp.name} (${empTokens.length} devices)`);
+          }
+
+          // Create in-app Notification for employee
+          const Notification = (await import("../models/notificationModel.js")).default;
+          const inAppNotif = new Notification({
+            title: notifTitle,
+            message: notifBody,
+            type: "lead_assignment",
+            priority: "high",
+            metadata: {
+              employeeId: freshEmp._id,
+              employeeName: freshEmp.name,
+              assignmentCount: assignments.length,
+              assignedAt: new Date()
+            }
+          });
+          await inAppNotif.save();
+
+          if (req.io) {
+            req.io.emit("newNotification", {
+              ...inAppNotif.toObject(),
+              employeeId: freshEmp._id.toString()
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error("⚠️ [LeadAssignment] Failed to send employee notification:", notifErr.message);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: `${assignments.length} leads assigned successfully`,

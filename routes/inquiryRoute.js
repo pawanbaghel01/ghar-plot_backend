@@ -10,7 +10,7 @@ router.post("/add", verifyToken, addInquiry);
 router.get("/get-enquiries", getEnquiries);
 
 // Delete inquiry
-router.delete("/delete/:id", verifyToken, deleteInquiry);
+router.delete("/delete/:id", deleteInquiry);
 
 // Add comment to inquiry
 router.post("/comment/:id", addCommentToInquiry);
@@ -29,8 +29,5 @@ router.get("/:id", getManualInquiryById);
 
 //  Update
 router.put("/update/:id", updateManualInquiry);
-
-//  Delete
-router.delete("/delete/:id", deleteManualInquiry);
 
 export default router;

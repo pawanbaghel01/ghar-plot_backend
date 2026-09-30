@@ -127,6 +127,23 @@ const alertSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    assignedEmployeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
+    enquiryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    clientName: {
+      type: String,
+      default: "",
+    },
+    phone: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );

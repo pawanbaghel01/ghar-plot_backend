@@ -170,28 +170,42 @@ Contact: ${contactNumber}`;
 
 
 //  Delete Inquiry
+//  Delete Inquiry (Handles both ManualInquiry and client Inquiry, cleans up assignments)
 export const deleteInquiry = async (req, res) => {
   try {
     const { id } = req.params;
-    const buyerId = req.user?.id || req.employee?._id;
 
-    const inquiry = await Inquiry.findById(id);
-    if (!inquiry) {
-      return res.status(404).json({ message: "Inquiry not found" });
+    // Check if it exists in ManualInquiry
+    const deletedManual = await ManualInquiry.findByIdAndDelete(id);
+    if (deletedManual) {
+      await LeadAssignment.deleteMany({ enquiryId: id });
+      return res.status(200).json({
+        success: true,
+        message: "Manual inquiry deleted successfully",
+      });
     }
 
-    // only the buyer who created it can delete it
-    if (inquiry.buyerId.toString() !== buyerId) {
-      return res
-        .status(403)
-        .json({ message: "Unauthorized to delete this inquiry" });
+    // Check if it exists in client Inquiry
+    const deletedClient = await Inquiry.findByIdAndDelete(id);
+    if (deletedClient) {
+      await LeadAssignment.deleteMany({ enquiryId: id });
+      return res.status(200).json({
+        success: true,
+        message: "Client inquiry deleted successfully",
+      });
     }
 
-    await Inquiry.findByIdAndDelete(id);
-    res.status(200).json({ message: "Inquiry deleted successfully" });
+    return res.status(404).json({
+      success: false,
+      message: "Inquiry not found",
+    });
   } catch (error) {
     console.error("Delete Inquiry Error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error while deleting inquiry",
+      error: error.message,
+    });
   }
 };
 
@@ -404,71 +418,66 @@ export const getManualInquiryById = async (req, res) => {
 };
 
 // ===========================
-//  Update Manual Inquiry
+//  Update Manual Inquiry or Client Inquiry
 // ===========================
 export const updateManualInquiry = async (req, res) => {
   try {
     const { id } = req.params;
     const updatedData = req.body;
 
+    // 1. Try to find and update in ManualInquiry
     const updatedInquiry = await ManualInquiry.findByIdAndUpdate(
       id,
       updatedData,
       {
         new: true,
-        runValidators: true,
+        runValidators: false,
       }
     );
 
-    if (!updatedInquiry) {
-      return res.status(404).json({
-        success: false,
-        message: "Manual inquiry not found",
+    if (updatedInquiry) {
+      return res.status(200).json({
+        success: true,
+        message: "Manual inquiry updated successfully",
+        data: updatedInquiry,
       });
     }
 
-    res.status(200).json({
-      success: true,
-      message: "Manual inquiry updated successfully",
-      data: updatedInquiry,
+    // 2. If not found in ManualInquiry, try client Inquiry
+    const clientInquiry = await Inquiry.findById(id);
+    if (clientInquiry) {
+      if (updatedData.clientName) clientInquiry.fullName = updatedData.clientName;
+      if (updatedData.contactNumber) clientInquiry.contactNumber = updatedData.contactNumber;
+      if (updatedData.email) clientInquiry.email = updatedData.email;
+      if (updatedData.status) clientInquiry.status = updatedData.status;
+      if (updatedData.caseStatus) clientInquiry.status = updatedData.caseStatus;
+      await clientInquiry.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Enquiry updated successfully",
+        data: clientInquiry,
+      });
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: "Inquiry not found",
     });
   } catch (error) {
+    console.error("Update Inquiry Error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to update manual inquiry",
+      message: "Failed to update inquiry",
       error: error.message,
     });
   }
 };
 
 // ===========================
-//  Delete Manual Inquiry
+//  Delete Manual Inquiry (Alias to unified deleteInquiry)
 // ===========================
-export const deleteManualInquiry = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const deletedInquiry = await ManualInquiry.findByIdAndDelete(id);
-
-    if (!deletedInquiry) {
-      return res.status(404).json({
-        success: false,
-        message: "Manual inquiry not found",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Manual inquiry deleted successfully",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to delete manual inquiry",
-      error: error.message,
-    });
-  }
-};
+export const deleteManualInquiry = deleteInquiry;
 
 // ===========================
 //  Add Comment to Inquiry

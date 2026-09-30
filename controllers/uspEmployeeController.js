@@ -1,12 +1,79 @@
 import USPEmployee from "../models/uspEmployeeSchema.js";
 import USPCategory from "../models/uspCategorySchema.js";
 import Employee from "../models/employeeSchema.js";
+import Admin from "../models/adminAuthSchema.js";
+import jwt from "jsonwebtoken";
+
+// Helper to resolve creator from Authorization token
+const resolveCreator = async (req) => {
+  let createdByAdmin = null;
+  let createdByEmployee = null;
+
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (decoded?.id) {
+        const adminUser = await Admin.findById(decoded.id);
+        if (adminUser) {
+          createdByAdmin = adminUser._id;
+        } else {
+          const empUser = await Employee.findById(decoded.id);
+          if (empUser) {
+            createdByEmployee = empUser._id;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Non-fatal if token is not passed or verified
+  }
+
+  // Fallback: If no creator identified, assign default super admin
+  if (!createdByAdmin && !createdByEmployee) {
+    const defaultAdmin = await Admin.findOne();
+    if (defaultAdmin) createdByAdmin = defaultAdmin._id;
+  }
+
+  return { createdByAdmin, createdByEmployee };
+};
+
+// Helper to compute combined scheduled Date
+const parseScheduledDateTime = (scheduledDate, scheduledTime, scheduledDateTime) => {
+  if (scheduledDateTime) {
+    const d = new Date(scheduledDateTime);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  if (scheduledDate && scheduledTime) {
+    const d = new Date(scheduledDate);
+    const [hours, minutes] = String(scheduledTime).split(":");
+    d.setHours(parseInt(hours || "0", 10), parseInt(minutes || "0", 10), 0, 0);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  return null;
+};
 
 // Add employee to category by employee ID
 export const addEmployeeByID = async (req, res) => {
   try {
-    const { employeeId, categoryId, expertise, experienceYears, description } =
-      req.body;
+    const {
+      employeeId,
+      categoryId,
+      expertise,
+      experienceYears,
+      description,
+      // Reminder fields
+      reminderTitle,
+      assignedEmployeeId,
+      scheduledDate,
+      scheduledTime,
+      scheduledDateTime,
+      scheduleType,
+      repeatType,
+      customDurationMinutes,
+    } = req.body;
 
     if (!employeeId || !categoryId) {
       return res.status(400).json({
@@ -46,6 +113,9 @@ export const addEmployeeByID = async (req, res) => {
       });
     }
 
+    const { createdByAdmin, createdByEmployee } = await resolveCreator(req);
+    const parsedDateTime = parseScheduledDateTime(scheduledDate, scheduledTime, scheduledDateTime);
+
     const uspEmployee = new USPEmployee({
       category: categoryId,
       employee: employeeId,
@@ -53,13 +123,28 @@ export const addEmployeeByID = async (req, res) => {
       expertise,
       experienceYears,
       description,
+      createdByAdmin,
+      createdByEmployee,
+      assignedEmployee: assignedEmployeeId || null,
+      reminderTitle: reminderTitle || "",
+      scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+      scheduledTime: scheduledTime || "",
+      scheduledDateTime: parsedDateTime,
+      scheduleType: scheduleType || "one_time",
+      repeatType: repeatType || "none",
+      customDurationMinutes: Number(customDurationMinutes) || 0,
+      isReminderActive: !!parsedDateTime,
+      cronFired: false,
     });
 
     await uspEmployee.save();
 
     const populatedEmployee = await USPEmployee.findById(uspEmployee._id)
       .populate("category", "name description")
-      .populate("employee", "name email phone");
+      .populate("employee", "name email phone")
+      .populate("assignedEmployee", "name email phone")
+      .populate("createdByAdmin", "name email")
+      .populate("createdByEmployee", "name email");
 
     res.status(201).json({
       success: true,
@@ -86,6 +171,15 @@ export const addEmployeeManually = async (req, res) => {
       expertise,
       experienceYears,
       description,
+      // Reminder fields
+      reminderTitle,
+      assignedEmployeeId,
+      scheduledDate,
+      scheduledTime,
+      scheduledDateTime,
+      scheduleType,
+      repeatType,
+      customDurationMinutes,
     } = req.body;
 
     if (!categoryId || !name || !phone) {
@@ -104,6 +198,9 @@ export const addEmployeeManually = async (req, res) => {
       });
     }
 
+    const { createdByAdmin, createdByEmployee } = await resolveCreator(req);
+    const parsedDateTime = parseScheduledDateTime(scheduledDate, scheduledTime, scheduledDateTime);
+
     const uspEmployee = new USPEmployee({
       category: categoryId,
       manualName: name,
@@ -112,13 +209,27 @@ export const addEmployeeManually = async (req, res) => {
       expertise,
       experienceYears,
       description,
+      createdByAdmin,
+      createdByEmployee,
+      assignedEmployee: assignedEmployeeId || null,
+      reminderTitle: reminderTitle || "",
+      scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+      scheduledTime: scheduledTime || "",
+      scheduledDateTime: parsedDateTime,
+      scheduleType: scheduleType || "one_time",
+      repeatType: repeatType || "none",
+      customDurationMinutes: Number(customDurationMinutes) || 0,
+      isReminderActive: !!parsedDateTime,
+      cronFired: false,
     });
 
     await uspEmployee.save();
 
-    const populatedEmployee = await USPEmployee.findById(
-      uspEmployee._id
-    ).populate("category", "name description");
+    const populatedEmployee = await USPEmployee.findById(uspEmployee._id)
+      .populate("category", "name description")
+      .populate("assignedEmployee", "name email phone")
+      .populate("createdByAdmin", "name email")
+      .populate("createdByEmployee", "name email");
 
     res.status(201).json({
       success: true,
@@ -141,6 +252,9 @@ export const getAllUSPEmployees = async (req, res) => {
     const employees = await USPEmployee.find({ isActive: true })
       .populate("category", "name description")
       .populate("employee", "name email phone")
+      .populate("assignedEmployee", "name email phone")
+      .populate("createdByAdmin", "name email")
+      .populate("createdByEmployee", "name email")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -178,6 +292,9 @@ export const getEmployeesByCategory = async (req, res) => {
     })
       .populate("category", "name description")
       .populate("employee", "name email phone")
+      .populate("assignedEmployee", "name email phone")
+      .populate("createdByAdmin", "name email")
+      .populate("createdByEmployee", "name email")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -203,7 +320,10 @@ export const getUSPEmployeeById = async (req, res) => {
 
     const employee = await USPEmployee.findById(id)
       .populate("category", "name description")
-      .populate("employee", "name email phone");
+      .populate("employee", "name email phone")
+      .populate("assignedEmployee", "name email phone")
+      .populate("createdByAdmin", "name email")
+      .populate("createdByEmployee", "name email");
 
     if (!employee) {
       return res.status(404).json({
@@ -238,6 +358,15 @@ export const updateUSPEmployee = async (req, res) => {
       isActive,
       manualName,
       manualPhone,
+      // Reminder fields
+      reminderTitle,
+      assignedEmployeeId,
+      scheduledDate,
+      scheduledTime,
+      scheduledDateTime,
+      scheduleType,
+      repeatType,
+      customDurationMinutes,
     } = req.body;
 
     const uspEmployee = await USPEmployee.findById(id);
@@ -269,15 +398,38 @@ export const updateUSPEmployee = async (req, res) => {
 
     // Update manual fields only for manual employees
     if (uspEmployee.employeeType === "manual") {
-      if (manualName) uspEmployee.manualName = manualName;
-      if (manualPhone) uspEmployee.manualPhone = manualPhone;
+      if (manualName !== undefined) uspEmployee.manualName = manualName;
+      if (manualPhone !== undefined) uspEmployee.manualPhone = manualPhone;
+    }
+
+    // Update reminder fields if passed
+    if (reminderTitle !== undefined) uspEmployee.reminderTitle = reminderTitle;
+    if (assignedEmployeeId !== undefined) uspEmployee.assignedEmployee = assignedEmployeeId || null;
+    if (scheduleType !== undefined) uspEmployee.scheduleType = scheduleType;
+    if (repeatType !== undefined) uspEmployee.repeatType = repeatType;
+    if (customDurationMinutes !== undefined) uspEmployee.customDurationMinutes = Number(customDurationMinutes) || 0;
+
+    if (scheduledDate !== undefined || scheduledTime !== undefined || scheduledDateTime !== undefined) {
+      const targetDate = scheduledDate !== undefined ? scheduledDate : uspEmployee.scheduledDate;
+      const targetTime = scheduledTime !== undefined ? scheduledTime : uspEmployee.scheduledTime;
+      const targetDateTime = scheduledDateTime !== undefined ? scheduledDateTime : null;
+
+      const parsedDateTime = parseScheduledDateTime(targetDate, targetTime, targetDateTime);
+      uspEmployee.scheduledDate = targetDate ? new Date(targetDate) : null;
+      uspEmployee.scheduledTime = targetTime || "";
+      uspEmployee.scheduledDateTime = parsedDateTime;
+      uspEmployee.isReminderActive = !!parsedDateTime;
+      uspEmployee.cronFired = false; // Reset to allow firing on updated time
     }
 
     await uspEmployee.save();
 
     const updatedEmployee = await USPEmployee.findById(id)
       .populate("category", "name description")
-      .populate("employee", "name email phone");
+      .populate("employee", "name email phone")
+      .populate("assignedEmployee", "name email phone")
+      .populate("createdByAdmin", "name email")
+      .populate("createdByEmployee", "name email");
 
     res.status(200).json({
       success: true,
