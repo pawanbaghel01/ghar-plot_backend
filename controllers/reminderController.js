@@ -4,6 +4,7 @@ import UserLeadAssignment from "../models/userLeadAssignmentSchema.js";
 import ManualInquiry from "../models/manualInquirySchema.js";
 import Employee from "../models/employeeSchema.js";
 import Notification from "../models/notificationModel.js";
+import Alert from "../models/alertSchema.js";
 import { sendAdminReminderNotification } from "../utils/fcmNotificationService.js";
 
 
@@ -1103,9 +1104,29 @@ export const updateReminder = async (req, res) => {
     } = req.body;
     const employeeId = req.user.id || req.user._id;
 
-    const reminder = await Reminder.findById(reminderId);
+    const cleanId = String(reminderId).replace(/^(alert_|reminder_)/, '');
+    let reminder = await Reminder.findById(cleanId);
 
     if (!reminder) {
+      const alert = await Alert.findById(cleanId);
+      if (alert) {
+        if (title !== undefined) alert.title = title;
+        if (comment !== undefined || note !== undefined) alert.reason = comment || note;
+        if (req.body.placeReminder !== undefined) {
+          const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
+          alert.placeReminder = isPlace;
+          alert.isActive = isPlace;
+        }
+        if (isActive !== undefined) {
+          alert.isActive = isActive === true || isActive === 'true';
+        }
+        await alert.save();
+        return res.status(200).json({
+          success: true,
+          message: "Alert updated successfully",
+          data: alert,
+        });
+      }
       return res.status(404).json({
         success: false,
         message: "Reminder not found"
@@ -1190,6 +1211,9 @@ export const updateReminder = async (req, res) => {
           reminder.cronFired = false;
           reminder.isActive = true;
         }
+      } else {
+        reminder.isActive = false;
+        reminder.status = 'inactive';
       }
       contentChanged = true;
     }

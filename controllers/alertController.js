@@ -426,6 +426,7 @@ import Alert from "../models/alertSchema.js";
 import { sendPushNotification } from "../utils/sendNotification.js";
 import Admin from "../models/adminAuthSchema.js";
 import Employee from "../models/employeeSchema.js";
+import Reminder from "../models/reminderSchema.js";
 
 // Create a new alert
 export const createAlert = async (req, res) => {
@@ -1222,6 +1223,7 @@ export const editAlert = async (req, res) => {
 
   try {
     const { id } = req.params;
+    const cleanId = String(id).replace(/^(alert_|reminder_)/, '');
     const userId = req.user.id;
 
     const {
@@ -1238,9 +1240,46 @@ export const editAlert = async (req, res) => {
       scheduledDateTime: providedScheduledDateTime,
     } = req.body;
 
-    const alert = await Alert.findOne({ _id: id, userId });
+    let alert = await Alert.findOne({ _id: cleanId, userId });
+
+    if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+      alert = await Alert.findById(cleanId);
+    }
 
     if (!alert) {
+      // Check if this ID is in the Reminder collection
+      const reminder = await Reminder.findById(cleanId);
+      if (reminder) {
+        if (title !== undefined) reminder.title = title;
+        if (reason !== undefined) {
+          reminder.comment = reason;
+          reminder.note = reason;
+        }
+        if (req.body.placeReminder !== undefined) {
+          const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
+          reminder.placeReminder = isPlace;
+          if (isPlace) {
+            if (new Date(reminder.reminderDateTime) > new Date()) {
+              reminder.status = 'pending';
+              reminder.cronFired = false;
+              reminder.isActive = true;
+            }
+          } else {
+            reminder.isActive = false;
+            reminder.status = 'inactive';
+          }
+        }
+        if (isActive !== undefined) {
+          reminder.isActive = isActive === true || isActive === 'true';
+        }
+        await reminder.save();
+        return res.status(200).json({
+          success: true,
+          message: "Reminder updated successfully",
+          data: reminder,
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: "Alert not found or unauthorized",
@@ -1332,6 +1371,9 @@ export const editAlert = async (req, res) => {
 
     if (req.body.placeReminder !== undefined) {
       alert.placeReminder = req.body.placeReminder === true || req.body.placeReminder === 'true';
+      if (!alert.placeReminder) {
+        alert.isActive = false;
+      }
     }
 
     if (req.body.isActive !== undefined) {
@@ -1373,11 +1415,24 @@ export const editAlert = async (req, res) => {
 export const deleteAlert = async (req, res) => {
   try {
     const { id } = req.params;
+    const cleanId = String(id).replace(/^(alert_|reminder_)/, '');
     const userId = req.user.id;
 
-    const alert = await Alert.findOneAndDelete({ _id: id, userId });
+    let alert = await Alert.findOneAndDelete({ _id: cleanId, userId });
+
+    if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+      alert = await Alert.findByIdAndDelete(cleanId);
+    }
 
     if (!alert) {
+      const reminder = await Reminder.findByIdAndDelete(cleanId);
+      if (reminder) {
+        return res.status(200).json({
+          success: true,
+          message: "Reminder deleted successfully",
+          data: reminder,
+        });
+      }
       return res.status(404).json({
         success: false,
         message: "Alert not found or unauthorized",
