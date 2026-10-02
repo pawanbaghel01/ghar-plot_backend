@@ -540,6 +540,11 @@ export const createReminder = async (req, res) => {
       });
     }
 
+    // Read placeReminder toggle (default true)
+    const isPlaceReminder = req.body.placeReminder !== undefined
+      ? (req.body.placeReminder === true || req.body.placeReminder === 'true')
+      : true;
+
     // Create reminder
     const reminder = new Reminder({
       assignmentId: finalAssignmentId,
@@ -551,6 +556,7 @@ export const createReminder = async (req, res) => {
       reminderDateTime: new Date(reminderDateTime), // 🇮🇳 Accept as-is, frontend should send UTC
       isRepeating: isRepeating || false,
       repeatType: repeatType || 'daily',
+      placeReminder: isPlaceReminder,
       // Store client information for display in popup
       clientName: clientName?.trim(),
       phone: phone?.trim(),
@@ -558,7 +564,7 @@ export const createReminder = async (req, res) => {
       location: location?.trim()
     });
     
-    console.log(`📅 [CreateReminder] reminderDateTime received: ${reminderDateTime} → stored as: ${reminder.reminderDateTime.toISOString()}`);
+    console.log(`📅 [CreateReminder] reminderDateTime received: ${reminderDateTime} → stored as: ${reminder.reminderDateTime.toISOString()} | placeReminder: ${isPlaceReminder}`);
 
 
     // Calculate next trigger for repeating reminders
@@ -568,9 +574,9 @@ export const createReminder = async (req, res) => {
 
     await reminder.save();
 
-    // ✅ Check if admin notification is enabled for this employee
+    // ✅ Check if admin notification is enabled for this employee (ONLY if placeReminder is true)
     const employee = await Employee.findById(employeeId).select('name email fcmToken adminReminderPopupEnabled');
-    if (employee && employee.adminReminderPopupEnabled === true) {
+    if (isPlaceReminder && employee && employee.adminReminderPopupEnabled === true) {
       console.log(`📢 Admin notification enabled for employee: ${employee.name}`);
 
       // 🔥 ADDITIONAL CHECK: Prevent duplicate admin notifications
@@ -1175,6 +1181,18 @@ export const updateReminder = async (req, res) => {
       }
     }
     if (isActive !== undefined) reminder.isActive = isActive;
+    if (req.body.placeReminder !== undefined) {
+      const isPlaceReminder = req.body.placeReminder === true || req.body.placeReminder === 'true';
+      reminder.placeReminder = isPlaceReminder;
+      if (isPlaceReminder) {
+        if (new Date(reminder.reminderDateTime) > new Date()) {
+          reminder.status = 'pending';
+          reminder.cronFired = false;
+          reminder.isActive = true;
+        }
+      }
+      contentChanged = true;
+    }
 
     // Add to edit history if content changed
     if (contentChanged) {
@@ -1455,6 +1473,10 @@ export const createReminderFromLead = async (req, res) => {
       console.log('Manual inquiry linked to reminder:', { manualInquiryId, clientName: manualInquiry.clientName });
     }
 
+    const isPlaceReminder = req.body.placeReminder !== undefined
+      ? (req.body.placeReminder === true || req.body.placeReminder === 'true')
+      : true;
+
     // Create reminder without assignment (standalone reminder or with manual inquiry)
     const reminder = new Reminder({
       employeeId,
@@ -1463,6 +1485,7 @@ export const createReminderFromLead = async (req, res) => {
       note: note || '',
       reminderDateTime: new Date(reminderTime),
       isRepeating: false,
+      placeReminder: isPlaceReminder,
       // Store client information for display
       clientName: name?.trim(),
       phone: phone?.trim(),
@@ -1476,12 +1499,12 @@ export const createReminderFromLead = async (req, res) => {
 
     await reminder.save();
 
-    // ✅ Notification logic for admin/managers
+    // ✅ Notification logic for admin/managers (ONLY if placeReminder is true)
     try {
       console.log(`[DEBUG] createReminderFromLead: Checking admin notification status for employee ${employeeId}`);
       const employee = await Employee.findById(employeeId).select('name email fcmToken adminReminderPopupEnabled');
 
-      if (employee && employee.adminReminderPopupEnabled === true) {
+      if (isPlaceReminder && employee && employee.adminReminderPopupEnabled === true) {
         console.log(`📢 Admin notification enabled for employee: ${employee.name}. Proceeding to notify admins.`);
 
         // 1. Create database notification record
@@ -1728,6 +1751,13 @@ export const getRemindersByManualInquiry = async (req, res) => {
 export const scheduleReminderNotification = async (req, res) => {
   try {
     const { reminderId, scheduledTime, title, message, fcmToken, data } = req.body;
+
+    if (req.body.placeReminder === false) {
+      return res.status(200).json({
+        success: true,
+        message: 'Notification skipped because placeReminder is disabled'
+      });
+    }
 
     // Validate required fields
     if (!reminderId || !scheduledTime || !fcmToken) {

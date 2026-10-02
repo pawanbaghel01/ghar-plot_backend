@@ -166,12 +166,13 @@ export const initAlertCron = () => {
 
       const dueAlerts = await Alert.find({
         isActive: true,
+        placeReminder: { $ne: false },
         scheduledDateTime: { $lte: now }
       });
 
       for (const alert of dueAlerts) {
         const freshAlert = await Alert.findById(alert._id);
-        if (!freshAlert || !freshAlert.isActive) continue;
+        if (!freshAlert || !freshAlert.isActive || freshAlert.placeReminder === false) continue;
 
         if (alert.lastTriggered && (now - alert.lastTriggered) < 30 * 1000) {
           continue;

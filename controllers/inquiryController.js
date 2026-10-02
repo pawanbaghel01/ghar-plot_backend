@@ -325,6 +325,9 @@ export const createManualInquiry = async (req, res) => {
       weekOrActionTaken,
       actionPlan,
       referenceBy,
+      comments: (majorComments && typeof majorComments === 'string' && majorComments.trim())
+        ? [{ comment: majorComments.trim(), addedBy: "Admin", addedAt: new Date() }]
+        : [],
     });
 
     await newInquiry.save();
@@ -480,6 +483,44 @@ export const updateManualInquiry = async (req, res) => {
 export const deleteManualInquiry = deleteInquiry;
 
 // ===========================
+//  Delete All Inquiries (Admin Only)
+// ===========================
+export const deleteAllInquiries = async (req, res) => {
+  try {
+    const { source } = req.query;
+    let manualDeleted = 0;
+    let clientDeleted = 0;
+
+    if (!source || source === "all" || source === "manual") {
+      const resManual = await ManualInquiry.deleteMany({});
+      manualDeleted = resManual.deletedCount || 0;
+    }
+
+    if (!source || source === "all" || source === "client") {
+      const resClient = await Inquiry.deleteMany({});
+      clientDeleted = resClient.deletedCount || 0;
+    }
+
+    // Clean up all LeadAssignments
+    await LeadAssignment.deleteMany({});
+
+    return res.status(200).json({
+      success: true,
+      message: "All clients/leads deleted successfully",
+      deletedCount: manualDeleted + clientDeleted,
+      details: { manualDeleted, clientDeleted },
+    });
+  } catch (error) {
+    console.error("Delete All Inquiries Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while deleting all enquiries",
+      error: error.message,
+    });
+  }
+};
+
+// ===========================
 //  Add Comment to Inquiry
 // ===========================
 export const addCommentToInquiry = async (req, res) => {
@@ -487,21 +528,19 @@ export const addCommentToInquiry = async (req, res) => {
     const { id } = req.params;
     const { comment, addedBy } = req.body;
 
-    if (!comment || !addedBy) {
+    if (!comment || typeof comment !== "string" || !comment.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Comment and addedBy are required",
+        message: "Comment text is required",
       });
     }
 
     // Try to find in ManualInquiry first
     let inquiry = await ManualInquiry.findById(id);
-    let isManualInquiry = true;
 
     if (!inquiry) {
       // Try regular Inquiry
       inquiry = await Inquiry.findById(id);
-      isManualInquiry = false;
     }
 
     if (!inquiry) {
@@ -511,31 +550,28 @@ export const addCommentToInquiry = async (req, res) => {
       });
     }
 
-    // For ManualInquiry, add to comments array
-    if (isManualInquiry) {
-      inquiry.comments.push({
-        comment,
-        addedBy,
-        addedAt: new Date()
-      });
-      
-      await inquiry.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Comment added successfully",
-        data: inquiry,
-      });
+    if (!Array.isArray(inquiry.comments)) {
+      inquiry.comments = [];
     }
 
-    // For regular Inquiry, we need to add a comments field or use LeadAssignment
-    return res.status(400).json({
-      success: false,
-      message: "Regular inquiries don't support direct comments. Please use LeadAssignment follow-up history instead.",
+    const newCommentItem = {
+      comment: comment.trim(),
+      addedBy: addedBy || "Admin",
+      addedAt: new Date(),
+    };
+
+    inquiry.comments.push(newCommentItem);
+    await inquiry.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Comment added successfully",
+      data: inquiry,
+      comment: newCommentItem,
     });
 
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to add comment",
       error: error.message,

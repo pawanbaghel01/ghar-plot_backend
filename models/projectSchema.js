@@ -14,6 +14,13 @@ const projectSchema = new mongoose.Schema(
       required: true,
     },
 
+    assignedEmployees: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Employee",
+      },
+    ],
+
     status: {
       type: String,
       enum: ["Active", "Inactive", "Completed", "Complete", "In Progress", "On Hold", "Cancelled"],
@@ -25,6 +32,7 @@ const projectSchema = new mongoose.Schema(
 );
 
 projectSchema.index({ client: 1 });
+projectSchema.index({ assignedEmployees: 1 });
 projectSchema.index({ status: 1 });
 
 export default mongoose.model("Project", projectSchema);

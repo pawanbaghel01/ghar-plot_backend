@@ -7,6 +7,7 @@ import {
   getUSPEmployeeById,
   updateUSPEmployee,
   deleteUSPEmployee,
+  deleteAllUSPEmployees,
   getCategoriesWithCount,
 } from "../controllers/uspEmployeeController.js";
 
@@ -26,6 +27,9 @@ router.get("/categories-with-count", getCategoriesWithCount);
 
 // Get employees by category
 router.get("/category/:categoryId", getEmployeesByCategory);
+
+// Delete all USP employees (MUST be before /:id)
+router.delete("/delete-all", deleteAllUSPEmployees);
 
 // Get single USP employee by ID
 router.get("/:id", getUSPEmployeeById);

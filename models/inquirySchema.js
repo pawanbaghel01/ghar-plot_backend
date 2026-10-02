@@ -32,7 +32,22 @@ const inquirySchema = new mongoose.Schema(
       required: true,
     },
 
-  
+    comments: [
+      {
+        comment: {
+          type: String,
+          required: true,
+        },
+        addedBy: {
+          type: String,
+          default: "Admin",
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -116,13 +116,26 @@ export const addEmployeeByID = async (req, res) => {
     const { createdByAdmin, createdByEmployee } = await resolveCreator(req);
     const parsedDateTime = parseScheduledDateTime(scheduledDate, scheduledTime, scheduledDateTime);
 
+    const now = new Date();
+    const timeStr = now.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const formattedInitialDescription = description ? `[Added ${timeStr}]:\n${description.trim()}` : "";
+
     const uspEmployee = new USPEmployee({
       category: categoryId,
       employee: employeeId,
       employeeType: "system",
       expertise,
       experienceYears,
-      description,
+      description: formattedInitialDescription,
+      descriptionHistory: description ? [{ text: description.trim(), addedAt: now, addedBy: "Admin" }] : [],
       createdByAdmin,
       createdByEmployee,
       assignedEmployee: assignedEmployeeId || null,
@@ -201,6 +214,18 @@ export const addEmployeeManually = async (req, res) => {
     const { createdByAdmin, createdByEmployee } = await resolveCreator(req);
     const parsedDateTime = parseScheduledDateTime(scheduledDate, scheduledTime, scheduledDateTime);
 
+    const now = new Date();
+    const timeStr = now.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const formattedInitialDescription = description ? `[Added ${timeStr}]:\n${description.trim()}` : "";
+
     const uspEmployee = new USPEmployee({
       category: categoryId,
       manualName: name,
@@ -208,7 +233,8 @@ export const addEmployeeManually = async (req, res) => {
       employeeType: "manual",
       expertise,
       experienceYears,
-      description,
+      description: formattedInitialDescription,
+      descriptionHistory: description ? [{ text: description.trim(), addedAt: now, addedBy: "Admin" }] : [],
       createdByAdmin,
       createdByEmployee,
       assignedEmployee: assignedEmployeeId || null,
@@ -355,6 +381,7 @@ export const updateUSPEmployee = async (req, res) => {
       expertise,
       experienceYears,
       description,
+      newDescription,
       isActive,
       manualName,
       manualPhone,
@@ -393,7 +420,48 @@ export const updateUSPEmployee = async (req, res) => {
     if (expertise !== undefined) uspEmployee.expertise = expertise;
     if (experienceYears !== undefined)
       uspEmployee.experienceYears = experienceYears;
-    if (description !== undefined) uspEmployee.description = description;
+
+    // Description logic: previous descriptions cannot be edited/overwritten, only new description can be appended
+    const noteToAdd = (newDescription && typeof newDescription === "string" && newDescription.trim())
+      ? newDescription.trim()
+      : (description && typeof description === "string" && description.trim() && description.trim() !== (uspEmployee.description || "").trim())
+        ? description.trim()
+        : null;
+
+    if (noteToAdd) {
+      const now = new Date();
+      const timeStr = now.toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
+      uspEmployee.description = uspEmployee.description
+        ? `${uspEmployee.description.trim()}${appendedEntry}`
+        : noteToAdd;
+
+      if (!Array.isArray(uspEmployee.descriptionHistory)) {
+        uspEmployee.descriptionHistory = [];
+        if (uspEmployee.description && uspEmployee.description !== noteToAdd) {
+          uspEmployee.descriptionHistory.push({
+            text: uspEmployee.description.replace(appendedEntry, "").trim(),
+            addedAt: uspEmployee.createdAt || new Date(),
+            addedBy: "Admin",
+          });
+        }
+      }
+      uspEmployee.descriptionHistory.push({
+        text: noteToAdd,
+        addedAt: now,
+        addedBy: "Admin",
+      });
+    }
+
     if (isActive !== undefined) uspEmployee.isActive = isActive;
 
     // Update manual fields only for manual employees
@@ -471,6 +539,32 @@ export const deleteUSPEmployee = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error deleting USP employee",
+      error: error.message,
+    });
+  }
+};
+
+// Delete all USP employees (Admin only)
+export const deleteAllUSPEmployees = async (req, res) => {
+  try {
+    const { categoryId } = req.query;
+    const filter = {};
+    if (categoryId && categoryId !== "all") {
+      filter.category = categoryId;
+    }
+
+    const result = await USPEmployee.deleteMany(filter);
+
+    res.status(200).json({
+      success: true,
+      message: "All USP employees deleted successfully",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error deleting all USP employees:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error deleting all USP employees",
       error: error.message,
     });
   }

@@ -508,6 +508,9 @@ export const createAlert = async (req, res) => {
     // Determine strict repeatFrequency and repeatDaily
     const finalRepeatFrequency = repeatFrequency || (repeatDaily ? "daily" : "none");
     const finalRepeatDaily = finalRepeatFrequency === "daily";
+    const isPlaceReminder = req.body.placeReminder !== undefined
+      ? (req.body.placeReminder === true || req.body.placeReminder === 'true')
+      : true;
 
     // Create new alert
     const newAlert = new Alert({
@@ -518,6 +521,7 @@ export const createAlert = async (req, res) => {
       reason,
       repeatDaily: finalRepeatDaily,
       isActive: isActive !== undefined ? isActive : true,
+      placeReminder: isPlaceReminder,
       category: category || "alert",
       repeatFrequency: finalRepeatFrequency,
       repeatMetadata: repeatMetadata || null,
@@ -582,6 +586,15 @@ export const scheduleNotification = async (req, res) => {
       } catch (e) {
         console.warn("⚠️ [ScheduleNotification] Error auto-resolving assignment:", e.message);
       }
+    }
+
+    // If placeReminder is explicitly false, skip notification scheduling completely
+    if (req.body.placeReminder === false || req.body.placeReminder === 'false') {
+      console.log('ℹ️ [ScheduleNotification] placeReminder is false, skipping notification scheduling.');
+      return res.status(200).json({
+        success: true,
+        message: "Note saved. Notification scheduling skipped as placeReminder is disabled.",
+      });
     }
 
     // Validate required fields
@@ -1317,8 +1330,23 @@ export const editAlert = async (req, res) => {
 
     alert.scheduledDateTime = calculatedScheduledDateTime;
 
+    if (req.body.placeReminder !== undefined) {
+      alert.placeReminder = req.body.placeReminder === true || req.body.placeReminder === 'true';
+    }
+
+    if (req.body.isActive !== undefined) {
+      alert.isActive = req.body.isActive === true || req.body.isActive === 'true';
+    } else if (alert.placeReminder !== false) {
+      alert.isActive = true;
+    }
+
+    // Reset lastTriggered so cron can trigger it when due if placeReminder is active and scheduled for future
+    if (alert.placeReminder !== false && alert.scheduledDateTime > new Date()) {
+      alert.lastTriggered = null;
+    }
+
     console.log(
-      `📅 Updated scheduledDateTime: ${alert.scheduledDateTime}`
+      `📅 Updated scheduledDateTime: ${alert.scheduledDateTime} | placeReminder: ${alert.placeReminder} | isActive: ${alert.isActive}`
     );
 
     await alert.save();

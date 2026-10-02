@@ -1,6 +1,7 @@
 import Project from "../models/projectSchema.js";
 import Client from "../models/clientSchema.js";
 import User from "../models/user.js";
+import Expense from "../models/expenseSchema.js";
 
 // Helper to resolve client: checks Client collection, if not found checks User collection and auto-syncs
 const resolveClientOrUser = async (clientIdOrUserId) => {
@@ -29,7 +30,7 @@ const resolveClientOrUser = async (clientIdOrUserId) => {
 // ─── CREATE ────────────────────────────────────────────────────────────────────
 export const createProject = async (req, res) => {
   try {
-    const { projectName, client, status } = req.body;
+    const { projectName, client, status, assignedEmployees } = req.body;
 
     if (!projectName || !client) {
       return res.status(400).json({
@@ -59,12 +60,13 @@ export const createProject = async (req, res) => {
     const project = await Project.create({
       projectName: projectName.trim(),
       client: resolvedClientId,
+      assignedEmployees: Array.isArray(assignedEmployees) ? assignedEmployees : (assignedEmployees ? [assignedEmployees] : []),
       status: normalizedStatus,
     });
 
     const populated = await project.populate({
       path: "client",
-      select: "name contactNumber status",
+      select: "name contactNumber status assignedTo",
     });
 
     return res.status(201).json({
@@ -81,18 +83,39 @@ export const createProject = async (req, res) => {
 };
 
 // ─── GET ALL ───────────────────────────────────────────────────────────────────
-// Query: ?status=Active  ?client=<id>  ?search=projectName
+// Query: ?status=Active  ?client=<id>  ?search=projectName  ?employeeId=<id>
 export const getAllProjects = async (req, res) => {
   try {
-    const { status, client, search } = req.query;
+    const { status, client, search, employeeId } = req.query;
 
     const filter = {};
     if (status) filter.status = status;
     if (client) filter.client = client;
     if (search) filter.projectName = { $regex: search, $options: "i" };
 
+    if (employeeId) {
+      // Find clients assigned to this employee
+      const assignedClients = await Client.find({ assignedTo: employeeId }).select('_id');
+      const clientIds = assignedClients.map(c => c._id);
+
+      // Find projects where this employee has logged expenses
+      let expenseProjectIds = [];
+      try {
+        expenseProjectIds = await Expense.distinct('project', { businessAssociate: employeeId });
+      } catch (e) {
+        console.warn('Error finding expense project IDs:', e);
+      }
+
+      filter.$or = [
+        { assignedEmployees: employeeId },
+        { client: { $in: clientIds } },
+        { _id: { $in: expenseProjectIds } },
+      ];
+    }
+
     const projects = await Project.find(filter)
-      .populate({ path: "client", select: "name contactNumber status" })
+      .populate({ path: "client", select: "name contactNumber status assignedTo" })
+      .populate({ path: "assignedEmployees", select: "name email phone" })
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -141,7 +164,7 @@ export const getProjectById = async (req, res) => {
 export const updateProject = async (req, res) => {
   try {
     const { id } = req.params;
-    const { projectName, client, status } = req.body;
+    const { projectName, client, status, assignedEmployees } = req.body;
 
     const project = await Project.findById(id);
 
@@ -154,6 +177,9 @@ export const updateProject = async (req, res) => {
 
     const updateFields = {};
     if (projectName !== undefined) updateFields.projectName = projectName.trim();
+    if (assignedEmployees !== undefined) {
+      updateFields.assignedEmployees = Array.isArray(assignedEmployees) ? assignedEmployees : (assignedEmployees ? [assignedEmployees] : []);
+    }
     if (client !== undefined) {
       const resolvedClientId = await resolveClientOrUser(client);
       if (!resolvedClientId) {
@@ -179,7 +205,9 @@ export const updateProject = async (req, res) => {
     const updated = await Project.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
-    }).populate({ path: "client", select: "name contactNumber status" });
+    })
+      .populate({ path: "client", select: "name contactNumber status assignedTo" })
+      .populate({ path: "assignedEmployees", select: "name email phone" });
 
     return res.status(200).json({
       success: true,

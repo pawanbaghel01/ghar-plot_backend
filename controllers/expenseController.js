@@ -149,9 +149,14 @@ export const createExpense = async (req, res) => {
     }
 
     // Resolve client: either passed or picked from project
-    let clientId = client;
-    if (!clientId && projectDoc.client) {
-      clientId = projectDoc.client;
+    let clientId = null;
+    if (client && mongoose.Types.ObjectId.isValid(client)) {
+      clientId = client;
+    } else if (projectDoc.client) {
+      const pClient = projectDoc.client?._id || projectDoc.client;
+      if (mongoose.Types.ObjectId.isValid(pClient)) {
+        clientId = pClient;
+      }
     }
 
     const expenseDate = new Date(date);
@@ -449,7 +454,15 @@ export const createBatchExpenses = async (req, res) => {
       const projectDoc = await Project.findById(project);
       if (!projectDoc) continue;
 
-      let clientId = client || projectDoc.client;
+      let clientId = null;
+      if (client && mongoose.Types.ObjectId.isValid(client)) {
+        clientId = client;
+      } else if (projectDoc.client) {
+        const pClient = projectDoc.client?._id || projectDoc.client;
+        if (mongoose.Types.ObjectId.isValid(pClient)) {
+          clientId = pClient;
+        }
+      }
       const expenseDate = date ? new Date(date) : new Date();
 
       const newExpense = new Expense({

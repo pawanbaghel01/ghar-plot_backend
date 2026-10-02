@@ -123,6 +123,10 @@ const alertSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    placeReminder: {
+      type: Boolean,
+      default: true,
+    },
     lastTriggered: {
       type: Date,
       default: null,

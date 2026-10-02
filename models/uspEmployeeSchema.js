@@ -44,6 +44,22 @@ const uspEmployeeSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    descriptionHistory: [
+      {
+        text: {
+          type: String,
+          trim: true,
+        },
+        addedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        addedBy: {
+          type: String,
+          default: "Admin",
+        },
+      },
+    ],
     isActive: {
       type: Boolean,
       default: true,

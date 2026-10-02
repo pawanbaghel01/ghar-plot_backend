@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middlewares/authMiddleware.js";
-import { addInquiry, deleteInquiry,getEnquiries, createManualInquiry, getAllManualInquiries, getManualInquiryById, updateManualInquiry, deleteManualInquiry, addCommentToInquiry, getInquiryComments } from "../controllers/inquiryController.js";
+import { addInquiry, deleteInquiry, deleteAllInquiries, getEnquiries, createManualInquiry, getAllManualInquiries, getManualInquiryById, updateManualInquiry, deleteManualInquiry, addCommentToInquiry, getInquiryComments } from "../controllers/inquiryController.js";
 
 const router = express.Router();
 
@@ -8,6 +8,9 @@ const router = express.Router();
 router.post("/add", verifyToken, addInquiry);
 
 router.get("/get-enquiries", getEnquiries);
+
+// Delete all inquiries (Admin only)
+router.delete("/delete-all", deleteAllInquiries);
 
 // Delete inquiry
 router.delete("/delete/:id", deleteInquiry);

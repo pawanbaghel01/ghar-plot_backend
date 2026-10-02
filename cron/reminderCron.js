@@ -24,13 +24,14 @@ export const initReminderCron = (io) => {
       const now = new Date();
       console.log(`⏰ [Cron] Current Time (UTC): ${now.toISOString()}`);
 
-      const allActive = await Reminder.countDocuments({ isActive: true, status: { $nin: ['completed', 'dismissed'] }, cronFired: { $ne: true } });
-      console.log(`� [Cron] Total active/ready reminders in DB: ${allActive}`);
+      const allActive = await Reminder.countDocuments({ isActive: true, status: { $nin: ['completed', 'dismissed'] }, cronFired: { $ne: true }, placeReminder: { $ne: false } });
+      console.log(`⏰ [Cron] Total active/ready reminders in DB: ${allActive}`);
 
       const reminders = await Reminder.find({
         isActive: true,
         status: { $nin: ['completed', 'dismissed'] },
         cronFired: { $ne: true },
+        placeReminder: { $ne: false },
         $or: [
           { status: 'pending', reminderDateTime: { $lte: now }, isRepeating: { $ne: true } },
           { status: 'snoozed', snoozedUntil: { $lte: now } },
@@ -46,8 +47,8 @@ export const initReminderCron = (io) => {
         try {
           // 🔥 SAFETY: Double-check reminder still exists and not dismissed (prevent deleted reminders)
           const freshReminder = await Reminder.findById(r._id);
-          if (!freshReminder || freshReminder.status === 'dismissed' || freshReminder.status === 'completed' || !freshReminder.isActive) {
-            console.log(`⚠️ [Reminder-Cron] SKIP: Reminder ${r._id} deleted/dismissed/completed/inactive`);
+          if (!freshReminder || freshReminder.status === 'dismissed' || freshReminder.status === 'completed' || !freshReminder.isActive || freshReminder.placeReminder === false) {
+            console.log(`⚠️ [Reminder-Cron] SKIP: Reminder ${r._id} deleted/dismissed/completed/inactive/placeReminder=false`);
             continue;
           }
           

@@ -468,6 +468,10 @@ const reminderSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    placeReminder: {
+      type: Boolean,
+      default: true
+    },
 
     // Status tracking
     status: {
@@ -657,6 +661,7 @@ reminderSchema.statics.getDueReminders = async function (employeeId) {
   const reminders = await this.find({
     employeeId,
     isActive: true,
+    placeReminder: { $ne: false },
     status: { $nin: ['completed', 'dismissed'] }, // Exclude completed and dismissed reminders
     $or: [
       {
