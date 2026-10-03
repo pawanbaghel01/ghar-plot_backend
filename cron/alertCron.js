@@ -180,6 +180,7 @@ export const initAlertCron = () => {
 
         try {
           const isReminder = alert.category === "reminder";
+          let creatorEmployeeName = "";
 
           // ✅ CURRENT SCHEDULE TIME
           const scheduledAt = alert.scheduledDateTime
@@ -276,11 +277,50 @@ export const initAlertCron = () => {
                   ? adminUser.fcmTokens.map(t => t.token || t)
                   : (adminUser.fcmToken ? [adminUser.fcmToken] : []);
               } else {
-                const empUser = await Employee.findById(alert.userId).select("fcmTokens fcmToken");
+                const empUser = await Employee.findById(alert.userId).select("fcmTokens fcmToken name adminReminderPopupEnabled");
                 if (empUser) {
-                  recipientTokens = empUser.fcmTokens?.length
+                  const empTokens = empUser.fcmTokens?.length
                     ? empUser.fcmTokens.map(t => t.token || t)
                     : (empUser.fcmToken ? [empUser.fcmToken] : []);
+                  recipientTokens.push(...empTokens);
+
+                  // 🔥 DUAL NOTIFICATION: If admin enabled reminder monitoring for this employee, ALSO notify Admin!
+                  if (empUser.adminReminderPopupEnabled === true) {
+                    try {
+                      const adminUsers = await Admin.find({ isActive: { $ne: false } }).select("fcmTokens fcmToken");
+                      adminUsers.forEach(adm => {
+                        const admTokens = adm.fcmTokens?.length
+                          ? adm.fcmTokens.map(t => t.token || t)
+                          : (adm.fcmToken ? [adm.fcmToken] : []);
+                        recipientTokens.push(...admTokens);
+                      });
+                      console.log(`🔔 [Alert-Cron] Dual notification enabled for employee "${empUser.name}" → Notifying Admin & Employee!`);
+                    } catch (admTokenErr) {
+                      console.warn("⚠️ [Alert-Cron] Failed to fetch admin tokens for dual notification:", admTokenErr.message);
+                    }
+                  }
+                  creatorEmployeeName = empUser.name || "";
+                }
+              }
+              if (alert.assignedEmployeeId) {
+                const assignedEmp = await Employee.findById(alert.assignedEmployeeId).select("fcmTokens fcmToken name adminReminderPopupEnabled");
+                if (assignedEmp) {
+                  const assignedTokens = assignedEmp.fcmTokens?.length
+                    ? assignedEmp.fcmTokens.map(t => t.token || t)
+                    : (assignedEmp.fcmToken ? [assignedEmp.fcmToken] : []);
+                  recipientTokens.push(...assignedTokens);
+                  if (assignedEmp.adminReminderPopupEnabled === true) {
+                    try {
+                      const adminUsers = await Admin.find({ isActive: { $ne: false } }).select("fcmTokens fcmToken");
+                      adminUsers.forEach(adm => {
+                        const admTokens = adm.fcmTokens?.length
+                          ? adm.fcmTokens.map(t => t.token || t)
+                          : (adm.fcmToken ? [adm.fcmToken] : []);
+                        recipientTokens.push(...admTokens);
+                      });
+                    } catch (_) {}
+                  }
+                  if (!creatorEmployeeName) creatorEmployeeName = assignedEmp.name || "";
                 }
               }
             } catch (userLookupErr) {
@@ -292,6 +332,9 @@ export const initAlertCron = () => {
           if (!recipientTokens.length && alert.fcmToken) {
             recipientTokens = [alert.fcmToken];
           }
+
+          // Remove duplicates and empty tokens
+          recipientTokens = [...new Set(recipientTokens.filter(Boolean))];
 
           if (recipientTokens.length > 0) {
             await sendPushNotification(
@@ -307,6 +350,7 @@ export const initAlertCron = () => {
 
                 reminderTitle: alert.title || "",
                 note: alert.reason || "",
+                employeeName: creatorEmployeeName,
 
                 // ✅ Fields used by sendPushNotification template (were empty before)
                 reason: alert.reason || "",

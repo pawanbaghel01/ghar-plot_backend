@@ -9,7 +9,8 @@ import {
   getAlertsByDateTime,
   scheduleNotification,
   deleteAlertsByCategory,          // ✅ ADD THIS
-  deleteMultipleAlerts      // ✅ ADD THIS
+  deleteMultipleAlerts,      // ✅ ADD THIS
+  getActiveEmployeeRemindersForAdmin,
 } from "../controllers/alertController.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
@@ -26,6 +27,9 @@ router.post("/", createAlert);
 
 // Get all alerts for the logged-in user
 router.get("/", getAlerts);
+
+// Get active employees' reminders for Admin Reminders Control screen
+router.get("/admin/employee-reminders", getActiveEmployeeRemindersForAdmin);
 
 // Get alerts by specific date and time
 router.get("/by-datetime", getAlertsByDateTime);

@@ -1631,10 +1631,12 @@ export const deleteMultipleAlerts = async (req, res) => {
       });
     }
 
-    const result = await Alert.deleteMany({
-      _id: { $in: alertIds },
-      userId,
-    });
+    const filter = { _id: { $in: alertIds } };
+    if (req.user?.role !== 'admin' && req.user?.role !== 'superadmin') {
+      filter.userId = userId;
+    }
+
+    const result = await Alert.deleteMany(filter);
 
     res.status(200).json({
       success: true,
@@ -1650,3 +1652,98 @@ export const deleteMultipleAlerts = async (req, res) => {
     });
   }
 };
+
+// Get reminders of all employees who have adminReminderPopupEnabled = true (for Admin Reminders Control screen)
+export const getActiveEmployeeRemindersForAdmin = async (req, res) => {
+  try {
+    const adminId = req.user?.id;
+    const { employeeId, search, status } = req.query;
+
+    // Verify admin access
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || await Admin.findById(adminId);
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Admin access required."
+      });
+    }
+
+    // Find all active employees who have adminReminderPopupEnabled = true
+    const activeEmployees = await Employee.find({
+      adminReminderPopupEnabled: true,
+      isActive: true
+    }).select('_id name email phone department role').lean();
+
+    if (!activeEmployees || activeEmployees.length === 0) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        activeEmployees: [],
+        data: []
+      });
+    }
+
+    const activeEmployeeMap = new Map();
+    activeEmployees.forEach(emp => {
+      activeEmployeeMap.set(emp._id.toString(), emp);
+    });
+
+    let targetEmployeeIds = activeEmployees.map(emp => emp._id);
+    if (employeeId && employeeId !== 'all') {
+      targetEmployeeIds = targetEmployeeIds.filter(id => id.toString() === employeeId.toString());
+    }
+
+    const query = {
+      $or: [
+        { userId: { $in: targetEmployeeIds } },
+        { assignedEmployeeId: { $in: targetEmployeeIds } }
+      ],
+      category: 'reminder'
+    };
+
+    if (status === 'active') {
+      query.isActive = true;
+    } else if (status === 'inactive') {
+      query.isActive = false;
+    }
+
+    if (search) {
+      const searchRegex = { $regex: search, $options: 'i' };
+      query.$and = [
+        {
+          $or: [
+            { title: searchRegex },
+            { reason: searchRegex }
+          ]
+        }
+      ];
+    }
+
+    const alerts = await Alert.find(query).sort({ date: -1, time: -1 }).lean();
+
+    const data = alerts.map((alert) => {
+      const emp = activeEmployeeMap.get(alert.userId?.toString()) || activeEmployeeMap.get(alert.assignedEmployeeId?.toString()) || null;
+      return {
+        ...alert,
+        employee: emp,
+        employeeName: emp?.name || '',
+        employeeDepartment: emp?.department || '',
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      activeEmployees,
+      data
+    });
+  } catch (error) {
+    console.error("Error fetching active employee reminders for admin:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch active employee reminders",
+      error: error.message
+    });
+  }
+};
+
