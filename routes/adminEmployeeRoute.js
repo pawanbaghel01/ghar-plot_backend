@@ -8,12 +8,16 @@ import {
   updateEmployeePassword,
   getEmployeeDashboardStats
 } from "../controllers/employeeController.js";
+import { toggleEmployeeReminderPopup } from "../controllers/adminReminderController.js";
 import { verifyAdminToken } from "../middlewares/adminAuthMiddleware.js";
 
 const router = express.Router();
 
 // Protected routes - require admin authentication
 router.use(verifyAdminToken); // Apply admin authentication to all routes below
+
+// Toggle reminder popup for an employee
+router.put("/:employeeId/reminder-popup", toggleEmployeeReminderPopup);
 
 // Dashboard stats - admin access
 router.get("/dashboard-stats", getEmployeeDashboardStats);

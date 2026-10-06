@@ -436,7 +436,23 @@ export const createAlert = async (req, res) => {
     console.log('🐛 [CreateAlert] User ID:', req.user?.id);
     console.log('🐛 [CreateAlert] Current time:', new Date().toISOString());
     
-    const { title, date, time, reason, repeatDaily, isActive, category, repeatFrequency, repeatMetadata, fcmToken: bodyFcmToken, scheduledDateTime: providedScheduledDateTime } = req.body;
+    const {
+      title,
+      date,
+      time,
+      reason,
+      repeatDaily,
+      isActive,
+      category,
+      repeatFrequency,
+      repeatMetadata,
+      fcmToken: bodyFcmToken,
+      scheduledDateTime: providedScheduledDateTime,
+      assignedEmployeeId: bodyAssignedEmployeeId,
+      enquiryId,
+      clientName,
+      phone,
+    } = req.body;
     const userId = req.user.id; // From verifyToken middleware
 
     // Validate required fields
@@ -446,6 +462,15 @@ export const createAlert = async (req, res) => {
         message: "Title, date, time, and reason are required fields",
       });
     }
+
+    // Resolve employee details (for creator employee)
+    let employee = await Employee.findById(userId).select('name phone email department').lean();
+    if (!employee && bodyAssignedEmployeeId) {
+      employee = await Employee.findById(bodyAssignedEmployeeId).select('name phone email department').lean();
+    }
+    const finalAssignedEmployeeId = bodyAssignedEmployeeId || (employee ? employee._id : null);
+    const finalPhone = phone || (employee ? employee.phone : "") || "";
+    const finalClientName = clientName || "";
 
     // 🔥 FIX: Strict duplicate prevention - same title + same user within 10 seconds
     const existingAlert = await Alert.findOne({
@@ -472,7 +497,6 @@ export const createAlert = async (req, res) => {
         finalFcmToken = admin.fcmToken;
         console.log(`📱 [CreateAlert] Got fcmToken from Admin profile`);
       } else {
-        const employee = await Employee.findById(userId).select('fcmToken');
         if (employee && employee.fcmToken) {
           finalFcmToken = employee.fcmToken;
           console.log(`📱 [CreateAlert] Got fcmToken from Employee profile`);
@@ -528,6 +552,10 @@ export const createAlert = async (req, res) => {
       repeatMetadata: repeatMetadata || null,
       scheduledDateTime: calculatedScheduledDateTime,  // 🔥 Now properly set
       fcmToken: finalFcmToken,  // 🔥 Now uses fallback from user profile
+      assignedEmployeeId: finalAssignedEmployeeId,
+      enquiryId: enquiryId || null,
+      clientName: finalClientName,
+      phone: finalPhone,
     });
 
     await newAlert.save();
@@ -536,7 +564,12 @@ export const createAlert = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Alert created successfully",
-      data: newAlert,
+      data: {
+        ...newAlert.toObject(),
+        employee: employee || null,
+        employeeName: employee?.name || finalClientName || '',
+        phone: finalPhone,
+      },
     });
   } catch (error) {
     console.error("Error creating alert:", error);
@@ -588,6 +621,16 @@ export const scheduleNotification = async (req, res) => {
         console.warn("⚠️ [ScheduleNotification] Error auto-resolving assignment:", e.message);
       }
     }
+
+    // Resolve employee details (for creator employee)
+    let employee = await Employee.findById(userId).select('name phone email department').lean();
+    if (!employee && finalAssignedEmpId) {
+      employee = await Employee.findById(finalAssignedEmpId).select('name phone email department').lean();
+    }
+    if (!finalAssignedEmpId && employee) {
+      finalAssignedEmpId = employee._id;
+    }
+    const finalPhone = phone || (employee ? employee.phone : "") || "";
 
     // If placeReminder is explicitly false, skip notification scheduling completely
     if (req.body.placeReminder === false || req.body.placeReminder === 'false') {
@@ -701,7 +744,7 @@ export const scheduleNotification = async (req, res) => {
         if (finalAssignedEmpId) alert.assignedEmployeeId = finalAssignedEmpId;
         if (enquiryId) alert.enquiryId = enquiryId;
         if (clientName) alert.clientName = clientName;
-        if (phone) alert.phone = phone;
+        if (phone || finalPhone) alert.phone = phone || finalPhone;
         await alert.save();
       } else {
         // No recent alert exists - safe to create new one
@@ -719,7 +762,7 @@ export const scheduleNotification = async (req, res) => {
           assignedEmployeeId: finalAssignedEmpId || null,
           enquiryId: enquiryId || null,
           clientName: clientName || "",
-          phone: phone || ""
+          phone: phone || finalPhone || ""
         });
         await alert.save();
       }
@@ -732,7 +775,12 @@ export const scheduleNotification = async (req, res) => {
       success: true,
       message: alertId ? "Alert notification rescheduled successfully" : "Alert notification scheduled successfully",
       data: {
-        alert,
+        alert: {
+          ...(alert.toObject ? alert.toObject() : alert),
+          employee: employee || null,
+          employeeName: employee?.name || alert.clientName || '',
+          phone: alert.phone || finalPhone || '',
+        },
         scheduledFor: {
           date: alertDate,
           time: alertTime,
@@ -1696,15 +1744,39 @@ export const getActiveEmployeeRemindersForAdmin = async (req, res) => {
       });
     }
 
+    const allTargetIds = [];
+    targetEmployeeIds.forEach(id => {
+      allTargetIds.push(id);
+      allTargetIds.push(id.toString());
+    });
+
     const activeEmployeeMap = new Map();
     activeEmployees.forEach(emp => {
       activeEmployeeMap.set(emp._id.toString(), emp);
     });
 
+    try {
+      const User = (await import("../models/userSchema.js")).default;
+      const empEmails = activeEmployees.map(e => e.email).filter(Boolean);
+      if (empEmails.length > 0) {
+        const matchingUsers = await User.find({ email: { $in: empEmails } }).select('_id email').lean();
+        matchingUsers.forEach(u => {
+          allTargetIds.push(u._id);
+          allTargetIds.push(u._id.toString());
+          const matchedEmp = activeEmployees.find(e => e.email === u.email);
+          if (matchedEmp) {
+            activeEmployeeMap.set(u._id.toString(), matchedEmp);
+          }
+        });
+      }
+    } catch (e) {
+      // User fallback optional
+    }
+
     const query = {
       $or: [
-        { userId: { $in: targetEmployeeIds } },
-        { assignedEmployeeId: { $in: targetEmployeeIds } }
+        { userId: { $in: allTargetIds } },
+        { assignedEmployeeId: { $in: allTargetIds } }
       ]
     };
 
@@ -1728,13 +1800,30 @@ export const getActiveEmployeeRemindersForAdmin = async (req, res) => {
 
     const alerts = await Alert.find(query).sort({ date: -1, time: -1 }).lean();
 
+    // Fetch any employees that might not be in activeEmployeeMap
+    const missingEmpIds = [];
+    alerts.forEach(alert => {
+      const uId = alert.userId?.toString();
+      const aId = alert.assignedEmployeeId?.toString();
+      if (uId && !activeEmployeeMap.has(uId)) missingEmpIds.push(uId);
+      if (aId && !activeEmployeeMap.has(aId)) missingEmpIds.push(aId);
+    });
+
+    if (missingEmpIds.length > 0) {
+      try {
+        const extraEmps = await Employee.find({ _id: { $in: missingEmpIds } }).select('_id name email phone department role').lean();
+        extraEmps.forEach(e => activeEmployeeMap.set(e._id.toString(), e));
+      } catch (err) {}
+    }
+
     const data = alerts.map((alert) => {
       const emp = activeEmployeeMap.get(alert.userId?.toString()) || activeEmployeeMap.get(alert.assignedEmployeeId?.toString()) || null;
       return {
         ...alert,
         employee: emp,
-        employeeName: emp?.name || '',
+        employeeName: emp?.name || alert.clientName || 'Employee',
         employeeDepartment: emp?.department || '',
+        phone: alert.phone || emp?.phone || '',
       };
     });
 

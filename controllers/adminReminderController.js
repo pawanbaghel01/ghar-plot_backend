@@ -251,12 +251,15 @@ export const toggleEmployeeReminderPopup = async (req, res) => {
     }
 
     const { employeeId } = req.params;
-    const { enabled } = req.body;
+    let enabled = req.body.enabled;
+    if (enabled === undefined && req.body.adminReminderPopupEnabled !== undefined) {
+      enabled = req.body.adminReminderPopupEnabled;
+    }
 
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({
         success: false,
-        message: "enabled field must be a boolean value"
+        message: "enabled or adminReminderPopupEnabled field must be a boolean value"
       });
     }
 
