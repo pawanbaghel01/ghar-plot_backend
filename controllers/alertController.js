@@ -1669,16 +1669,29 @@ export const getActiveEmployeeRemindersForAdmin = async (req, res) => {
     }
 
     // Find all active employees who have adminReminderPopupEnabled = true
-    const activeEmployees = await Employee.find({
+    let activeEmployees = await Employee.find({
       adminReminderPopupEnabled: true,
-      isActive: true
+      isActive: { $ne: false }
     }).select('_id name email phone department role').lean();
 
-    if (!activeEmployees || activeEmployees.length === 0) {
+    let targetEmployeeIds = [];
+    if (employeeId && employeeId !== 'all') {
+      const specificEmp = await Employee.findById(employeeId).select('_id name email phone department role').lean();
+      if (specificEmp) {
+        targetEmployeeIds = [specificEmp._id];
+        if (!activeEmployees.some(e => e._id.toString() === specificEmp._id.toString())) {
+          activeEmployees.push(specificEmp);
+        }
+      }
+    } else {
+      targetEmployeeIds = activeEmployees.map(emp => emp._id);
+    }
+
+    if (!targetEmployeeIds || targetEmployeeIds.length === 0) {
       return res.status(200).json({
         success: true,
         count: 0,
-        activeEmployees: [],
+        activeEmployees: activeEmployees || [],
         data: []
       });
     }
@@ -1688,17 +1701,11 @@ export const getActiveEmployeeRemindersForAdmin = async (req, res) => {
       activeEmployeeMap.set(emp._id.toString(), emp);
     });
 
-    let targetEmployeeIds = activeEmployees.map(emp => emp._id);
-    if (employeeId && employeeId !== 'all') {
-      targetEmployeeIds = targetEmployeeIds.filter(id => id.toString() === employeeId.toString());
-    }
-
     const query = {
       $or: [
         { userId: { $in: targetEmployeeIds } },
         { assignedEmployeeId: { $in: targetEmployeeIds } }
-      ],
-      category: 'reminder'
+      ]
     };
 
     if (status === 'active') {
