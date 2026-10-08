@@ -264,7 +264,7 @@ export const getAdminReminderNotifications = async (req, res) => {
       unreadOnly = false
     } = req.query;
 
-    const query = { type: 'admin_reminder' };
+    const query = { type: { $in: ['admin_reminder', 'employee_reminder_to_admin'] } };
 
     if (unreadOnly === 'true') {
       query.read = false;
@@ -322,7 +322,7 @@ export const markAdminReminderAsRead = async (req, res) => {
     const { notificationId } = req.params;
 
     const notification = await Notification.findOneAndUpdate(
-      { _id: notificationId, type: 'admin_reminder' },
+      { _id: notificationId, type: { $in: ['admin_reminder', 'employee_reminder_to_admin'] } },
       { read: true, readAt: new Date() },
       { new: true }
     );
@@ -354,7 +354,7 @@ export const markAdminReminderAsRead = async (req, res) => {
 export const markAllAdminRemindersAsRead = async (req, res) => {
   try {
     console.log('📬 BACKEND: Received Mark All as Read request');
-    const query = { type: 'admin_reminder', $or: [{ read: false }, { isRead: false }] };
+    const query = { type: { $in: ['admin_reminder', 'employee_reminder_to_admin'] }, $or: [{ read: false }, { isRead: false }] };
 
     // Sub-admin restriction
     if (req.isAdminEmployee) {
@@ -407,7 +407,7 @@ export const deleteAdminReminder = async (req, res) => {
 
     const notification = await Notification.findOneAndDelete({
       _id: notificationId,
-      type: 'admin_reminder'
+      type: { $in: ['admin_reminder', 'employee_reminder_to_admin'] }
     });
 
     if (!notification) {
@@ -439,7 +439,7 @@ export const deleteAdminReminder = async (req, res) => {
 export const deleteAllAdminReminders = async (req, res) => {
   try {
     console.log('📬 BACKEND: Received Clear All request for admin reminders');
-    const query = { type: 'admin_reminder' };
+    const query = { type: { $in: ['admin_reminder', 'employee_reminder_to_admin'] } };
 
     // Sub-admin restriction
     if (req.isAdminEmployee) {
@@ -505,11 +505,21 @@ export const receiveEmployeeNotification = async (req, res) => {
       employeeName
     });
 
+    let finalTitle = title;
+    const empName = employeeName || req.user?.name || '';
+    if (empName && empName !== 'Admin' && empName !== 'Employee' && empName !== 'System') {
+      if (!finalTitle || finalTitle === 'Reminder' || finalTitle === 'Reminder Due' || finalTitle === 'New Notification') {
+        finalTitle = `🔔 ${empName} - Reminder`;
+      } else if (!finalTitle.includes(empName)) {
+        finalTitle = `🔔 ${empName} - ${finalTitle.replace(/^[🔔⏰📋\s]+/, '')}`;
+      }
+    }
+
     // 1. Save notification to database
     const notification = new Notification({
-      title,
+      title: finalTitle,
       message,
-      type: notificationType || 'employee_notification',
+      type: notificationType || 'employee_reminder_to_admin',
       priority: 'high',
       metadata: {
         scheduledDate,
@@ -525,7 +535,15 @@ export const receiveEmployeeNotification = async (req, res) => {
         repeatType,
         repeatFrequency,
         employeeId,
-        employeeName
+        employeeName: empName || employeeName
+      },
+      reminderData: {
+        name: clientName,
+        phone,
+        email,
+        location: '',
+        note: reminderNote || message,
+        reminderTime: scheduledDate,
       },
       read: false,
       createdAt: new Date()
@@ -542,9 +560,9 @@ export const receiveEmployeeNotification = async (req, res) => {
         token: adminUser.fcmToken,
         // 🔥 DATA-ONLY: Explicitly removed top-level 'notification' block.
         data: {
-          type: notificationType || 'employee_notification',
+          type: notificationType || 'employee_reminder_to_admin',
           notificationId: notification._id.toString(),
-          title: String(title || "New Notification"),
+          title: String(finalTitle || "New Notification"),
           body: String(message || "You have an update"),
           enquiryId: String(enquiryId || ''),
           clientName: String(clientName || ''),
@@ -555,7 +573,7 @@ export const receiveEmployeeNotification = async (req, res) => {
           scheduledDate: String(scheduledDate || ''),
           scheduledTime: String(scheduledTime || ''),
           employeeId: String(employeeId || ''),
-          employeeName: String(employeeName || ''),
+          employeeName: String(empName || employeeName || ''),
           timestamp: String(Date.now())
         },
         android: {

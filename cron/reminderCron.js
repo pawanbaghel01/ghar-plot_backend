@@ -143,15 +143,16 @@ export const initReminderCron = (io) => {
             continue; // Skip this reminder
           }
           
+          const empName = r.employeeId?.name || 'Employee';
           const notification = new Notification({
-            title: isAdminAssignee ? `Employee Reminder - ${r.employeeId.name}` : "Reminder Due",
+            title: isAdminAssignee ? `Employee Reminder - ${empName}` : `⏰ ${empName} - Reminder Due`,
             message: r.title || `Follow up with ${r.clientName || 'Client'}`,
             type: isAdminAssignee ? 'admin_reminder' : 'employee_due_reminder',
             priority: 'high',
             metadata: {
               reminderId: r._id,
               employeeId: r.employeeId?._id,
-              employeeName: r.employeeId?.name,
+              employeeName: empName,
               reminderTitle: r.title,
               clientName: r.clientName,
               phone: r.phone,
