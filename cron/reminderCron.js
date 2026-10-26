@@ -277,7 +277,8 @@ export const initReminderCron = (io) => {
           }
 
           // For repeating reminders, calculate next trigger
-          if (r.isRepeating && r.isActive && !isNagging) {
+          const isDaysCustom = r.repeatType === 'custom' && r.customRepeatMinutes >= 1440 && (r.customRepeatMinutes % 1440 === 0);
+          if (r.isRepeating && r.isActive && (!isNagging || isDaysCustom)) {
             if (r.status === 'snoozed') {
               r.status = 'pending';
               r.snoozedUntil = null;

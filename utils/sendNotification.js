@@ -160,6 +160,9 @@ export const sendPushNotification = async (
       body: richBody,
     },
     data: {
+      ...Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : String(v ?? "")])
+      ),
       type: isAlert ? "alert" : "reminder",
       notificationType: isAlert ? "alert" : "reminder",
       category: data.category || (isAlert ? "alert" : "reminder"),
@@ -170,6 +173,7 @@ export const sendPushNotification = async (
       alertId: String(data.alertId || ""),
       reminderId: String(data.reminderId || ""),
       reason: data.reason || "",
+      note: data.note || data.reason || "",
       date: data.date || "",
       time: data.time || "",
       scheduledDateTime: data.scheduledDateTime || formattedTime,

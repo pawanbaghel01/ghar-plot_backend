@@ -209,10 +209,22 @@ export const initAlertCron = () => {
             alert.scheduledDateTime = nextScheduledTime;
           }
           else if (alert.repeatFrequency === "custom" && customMins > 0) {
-            const intervalMs = customMins * 60 * 1000;
-            nextScheduledTime = new Date(now.getTime() + intervalMs);
-            nextScheduledTime.setMilliseconds(0);
-            alert.scheduledDateTime = nextScheduledTime;
+            if (customMins % 1440 === 0) {
+              const days = customMins / 1440;
+              let nextDate = new Date(alert.scheduledDateTime.getTime() + days * 24 * 60 * 60 * 1000);
+              while (nextDate <= now) {
+                nextDate = new Date(nextDate.getTime() + days * 24 * 60 * 60 * 1000);
+              }
+              nextScheduledTime = nextDate;
+              alert.scheduledDateTime = nextScheduledTime;
+              alert.date = nextScheduledTime;
+              console.log(`🔄 [Alert-Cron] Custom repeat (${days} days) scheduled for: ${alert.scheduledDateTime.toISOString()}`);
+            } else {
+              const intervalMs = customMins * 60 * 1000;
+              nextScheduledTime = new Date(now.getTime() + intervalMs);
+              nextScheduledTime.setMilliseconds(0);
+              alert.scheduledDateTime = nextScheduledTime;
+            }
           }
           else if (alert.repeatFrequency === "daily") {
             nextScheduledTime = new Date(

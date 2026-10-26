@@ -614,6 +614,20 @@ reminderSchema.methods.calculateNextTrigger = function () {
         nextTrigger.setMonth(nextTrigger.getMonth() + 1);
       }
       break;
+    case 'custom':
+      if (this.customRepeatMinutes > 0) {
+        if (this.customRepeatMinutes % 1440 === 0) {
+          const days = this.customRepeatMinutes / 1440;
+          while (nextTrigger <= now) {
+            nextTrigger.setDate(nextTrigger.getDate() + days);
+          }
+        } else {
+          while (nextTrigger <= now) {
+            nextTrigger = new Date(nextTrigger.getTime() + this.customRepeatMinutes * 60 * 1000);
+          }
+        }
+      }
+      break;
   }
 
   this.nextTrigger = nextTrigger;

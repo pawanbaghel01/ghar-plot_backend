@@ -29,6 +29,7 @@ export const initUSPReminderCron = (io) => {
         cronFired: { $ne: true },
         scheduledDateTime: { $lte: now },
       })
+        .populate("category", "name description")
         .populate("employee", "name email phone fcmToken fcmTokens")
         .populate("assignedEmployee", "name email phone fcmToken fcmTokens")
         .populate("createdByAdmin", "name email fcmToken fcmTokens");
@@ -41,7 +42,7 @@ export const initUSPReminderCron = (io) => {
 
       for (const usp of dueUSPEntries) {
         try {
-          const freshUSP = await USPEmployee.findById(usp._id);
+          const freshUSP = await USPEmployee.findById(usp._id).populate("category", "name description");
           if (!freshUSP || !freshUSP.isActive || !freshUSP.isReminderActive || freshUSP.cronFired) {
             continue;
           }
@@ -57,10 +58,15 @@ export const initUSPReminderCron = (io) => {
           const targetPhone = usp.employeeType === "manual"
             ? (usp.manualPhone || "")
             : (usp.employee?.phone || "");
+          const categoryName = usp.category?.name || freshUSP.category?.name || "Team USP";
           const reminderTitle = usp.reminderTitle || `Team USP Reminder - ${targetName}`;
           const reminderNote = usp.description || `Follow-up reminder for ${targetName}`;
 
-          console.log(`🚀 [USPReminderCron] Triggering: "${reminderTitle}" for ${targetName}`);
+          // Notification card title & body (prominently displays User Name & Category)
+          const notifCardTitle = `${reminderTitle} • ${targetName}`;
+          const notifCardBody = `👤 Client: ${targetName} | 🏷️ Category: ${categoryName}${reminderNote ? `\n📝 ${reminderNote}` : ""}`;
+
+          console.log(`🚀 [USPReminderCron] Triggering: "${notifCardTitle}" for ${targetName} (${categoryName})`);
 
           // ==========================================
           // 1️⃣ SEND TO CREATOR ADMIN (ALWAYS)
@@ -93,20 +99,24 @@ export const initUSPReminderCron = (io) => {
             console.log(`📤 [USPReminderCron] Sending push to Creator Admin (${adminTokens.length} devices)`);
             await sendPushNotification(
               adminTokens,
-              reminderTitle,
-              reminderNote,
+              notifCardTitle,
+              notifCardBody,
               {
                 type: "admin_reminder",
                 reminderId: usp._id.toString(),
                 alertId: usp._id.toString(),
-                title: reminderTitle,
-                body: reminderNote,
+                title: notifCardTitle,
+                body: notifCardBody,
                 reminderTitle: reminderTitle,
                 note: reminderNote,
                 clientName: targetName,
                 name: targetName,
+                userName: targetName,
+                category: categoryName,
+                categoryName: categoryName,
                 phone: targetPhone,
                 contactNumber: targetPhone,
+                expertise: usp.expertise || "",
                 isDue: "true",
                 timestamp: String(Date.now()),
                 screen: "USPEmployeesScreen",
@@ -120,14 +130,20 @@ export const initUSPReminderCron = (io) => {
             socketIo.emit("employeeDueReminder", {
               flowType: "new_reminder_flow",
               senderName: "USP Reminder Bot",
-              displayTitle: "⏰ Team's USP Reminder!",
-              displayMessage: reminderTitle,
+              displayTitle: `⏰ Team's USP: ${categoryName}`,
+              displayMessage: `${reminderTitle} • ${targetName}`,
               id: usp._id.toString(),
               name: targetName,
-              title: reminderTitle,
+              clientName: targetName,
+              userName: targetName,
+              category: categoryName,
+              categoryName: categoryName,
+              title: notifCardTitle,
+              reminderTitle: reminderTitle,
               note: reminderNote,
               phone: targetPhone,
               contactNumber: targetPhone,
+              expertise: usp.expertise || "",
               reminderDateTime: usp.scheduledDateTime,
               assignmentType: "usp",
               status: "pending",
@@ -142,10 +158,12 @@ export const initUSPReminderCron = (io) => {
             console.log(`📤 [USPReminderCron] Sending due reminder to Assigned Employee ID: ${assigneeId}`);
             await sendEmployeeDueReminderNotification(assigneeId, {
               reminderId: usp._id.toString(),
-              title: reminderTitle,
+              title: notifCardTitle,
               clientName: targetName,
+              categoryName: categoryName,
+              category: categoryName,
               phone: targetPhone,
-              location: "Team's USP",
+              location: `Team USP (${categoryName})`,
               note: reminderNote,
               reminderTime: usp.scheduledDateTime,
             });
@@ -169,9 +187,21 @@ export const initUSPReminderCron = (io) => {
             usp.scheduledDate = nextDate;
             console.log(`🔄 [USPReminderCron] Monthly repeat scheduled for: ${usp.scheduledDateTime.toISOString()}`);
           } else if (usp.repeatType === "custom" && usp.customDurationMinutes > 0) {
-            usp.scheduledDateTime = new Date(now.getTime() + usp.customDurationMinutes * 60 * 1000);
-            usp.scheduledDate = usp.scheduledDateTime;
-            console.log(`🔄 [USPReminderCron] Custom repeat (${usp.customDurationMinutes}m) scheduled for: ${usp.scheduledDateTime.toISOString()}`);
+            // Check if custom interval is in days (multiple of 1440 minutes = 24 hours)
+            if (usp.customDurationMinutes % 1440 === 0) {
+              const days = usp.customDurationMinutes / 1440;
+              let nextDate = new Date(usp.scheduledDateTime.getTime() + days * 24 * 60 * 60 * 1000);
+              while (nextDate <= now) {
+                nextDate = new Date(nextDate.getTime() + days * 24 * 60 * 60 * 1000);
+              }
+              usp.scheduledDateTime = nextDate;
+              usp.scheduledDate = nextDate;
+              console.log(`🔄 [USPReminderCron] Custom repeat (${days} days) scheduled for: ${usp.scheduledDateTime.toISOString()}`);
+            } else {
+              usp.scheduledDateTime = new Date(now.getTime() + usp.customDurationMinutes * 60 * 1000);
+              usp.scheduledDate = usp.scheduledDateTime;
+              console.log(`🔄 [USPReminderCron] Custom repeat (${usp.customDurationMinutes}m) scheduled for: ${usp.scheduledDateTime.toISOString()}`);
+            }
           } else {
             // One-time reminder completed
             usp.cronFired = true;
