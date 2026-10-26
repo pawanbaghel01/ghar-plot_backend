@@ -62,8 +62,8 @@ export const initUSPReminderCron = (io) => {
           const reminderTitle = usp.reminderTitle || `Team USP Reminder - ${targetName}`;
           const reminderNote = usp.description || `Follow-up reminder for ${targetName}`;
 
-          // Notification card title & body (prominently displays User Name & Category)
-          const notifCardTitle = `${reminderTitle} • ${targetName}`;
+          // Notification card title & body
+          const notifCardTitle = reminderTitle;
           const notifCardBody = `👤 Client: ${targetName} | 🏷️ Category: ${categoryName}${reminderNote ? `\n📝 ${reminderNote}` : ""}`;
 
           console.log(`🚀 [USPReminderCron] Triggering: "${notifCardTitle}" for ${targetName} (${categoryName})`);
@@ -131,7 +131,7 @@ export const initUSPReminderCron = (io) => {
               flowType: "new_reminder_flow",
               senderName: "USP Reminder Bot",
               displayTitle: `⏰ Team's USP: ${categoryName}`,
-              displayMessage: `${reminderTitle} • ${targetName}`,
+              displayMessage: reminderTitle,
               id: usp._id.toString(),
               name: targetName,
               clientName: targetName,
