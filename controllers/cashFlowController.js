@@ -181,7 +181,7 @@ export const getAllCashFlows = async (req, res) => {
       console.error("[DailyCashFlow] Background auto-entry check error:", err)
     );
 
-    const { businessAssociate, startDate, endDate } = req.query;
+    const { businessAssociate, startDate, endDate, limit, page } = req.query;
 
     const filter = {};
     if (businessAssociate) {
@@ -198,30 +198,49 @@ export const getAllCashFlows = async (req, res) => {
       }
     }
 
-    const cashFlows = await CashFlow.find(filter)
+    const totalCount = await CashFlow.countDocuments(filter);
+
+    let query = CashFlow.find(filter)
       .populate([
         { path: "businessAssociate", select: "name email phone department" },
         { path: "createdBy", select: "name email" },
       ])
-      .sort({ date: -1, createdAt: -1 });
+      .sort({ date: -1, createdAt: -1 })
+      .lean();
 
-    // Efficiently compute expense count with a single aggregation instead of N queries
+    const limitNum = limit ? parseInt(limit, 10) : 0;
+    if (limitNum > 0) {
+      const pageNum = page ? Math.max(1, parseInt(page, 10)) : 1;
+      query = query.skip((pageNum - 1) * limitNum).limit(limitNum);
+    }
+
+    const cashFlows = await query;
+
+    // Efficiently compute expense count with aggregation for matched records
     let countMap = new Map();
     try {
-      const expenseCounts = await Expense.aggregate([
-        {
-          $group: {
-            _id: {
-              businessAssociate: "$businessAssociate",
-              date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+      const assocIds = [...new Set(cashFlows.map(cf => cf.businessAssociate?._id || cf.businessAssociate).filter(Boolean))];
+      if (assocIds.length > 0) {
+        const expenseFilter = { businessAssociate: { $in: assocIds } };
+        if (filter.date) {
+          expenseFilter.date = filter.date;
+        }
+        const expenseCounts = await Expense.aggregate([
+          { $match: expenseFilter },
+          {
+            $group: {
+              _id: {
+                businessAssociate: "$businessAssociate",
+                date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+              },
+              count: { $sum: 1 },
             },
-            count: { $sum: 1 },
           },
-        },
-      ]);
-      for (const ec of expenseCounts) {
-        if (ec._id?.businessAssociate && ec._id?.date) {
-          countMap.set(`${ec._id.businessAssociate.toString()}_${ec._id.date}`, ec.count);
+        ]);
+        for (const ec of expenseCounts) {
+          if (ec._id?.businessAssociate && ec._id?.date) {
+            countMap.set(`${ec._id.businessAssociate.toString()}_${ec._id.date}`, ec.count);
+          }
         }
       }
     } catch (aggErr) {
@@ -229,18 +248,20 @@ export const getAllCashFlows = async (req, res) => {
     }
 
     const results = cashFlows.map((cf) => {
-      const cfObj = cf.toObject();
       const assocId = cf.businessAssociate?._id
         ? cf.businessAssociate._id.toString()
         : cf.businessAssociate?.toString();
       const dateStr = cf.date ? new Date(cf.date).toISOString().split("T")[0] : "";
-      cfObj.expenseCount = countMap.get(`${assocId}_${dateStr}`) || 0;
-      return cfObj;
+      cf.expenseCount = countMap.get(`${assocId}_${dateStr}`) || 0;
+      return cf;
     });
 
     return res.status(200).json({
       success: true,
+      totalCount,
       count: results.length,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limitNum,
       data: results,
     });
   } catch (error) {

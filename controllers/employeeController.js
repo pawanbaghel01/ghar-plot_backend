@@ -73,7 +73,7 @@ export const createEmployee = async (req, res) => {
 // Get all employees
 export const getAllEmployees = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = "", roleFilter, isActive, department } = req.query;
+    const { page = 1, limit = 200, search = "", roleFilter, isActive, department } = req.query;
 
     const query = {};
 

@@ -16,6 +16,7 @@ uploads/*
 !uploads/default-avatar.jpg
 
 # Temporary & Output / Dump Files
+data/
 *.log
 log_temp.txt
 tmp_*
