@@ -5,6 +5,7 @@ import ManualInquiry from "../models/manualInquirySchema.js";
 import Employee from "../models/employeeSchema.js";
 import Notification from "../models/notificationModel.js";
 import Alert from "../models/alertSchema.js";
+import USPEmployee from "../models/uspEmployeeSchema.js";
 import { sendAdminReminderNotification } from "../utils/fcmNotificationService.js";
 
 
@@ -1127,6 +1128,67 @@ export const updateReminder = async (req, res) => {
           data: alert,
         });
       }
+
+      const uspEmployee = await USPEmployee.findById(cleanId);
+      if (uspEmployee) {
+        if (title !== undefined && title.trim()) uspEmployee.reminderTitle = title.trim();
+        if (comment !== undefined || note !== undefined) {
+          const noteToAdd = (comment || note || '').trim();
+          if (noteToAdd && noteToAdd !== (uspEmployee.description || '').trim()) {
+            const now = new Date();
+            const timeStr = now.toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            });
+            const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
+            uspEmployee.description = uspEmployee.description
+              ? `${uspEmployee.description.trim()}${appendedEntry}`
+              : noteToAdd;
+
+            if (!Array.isArray(uspEmployee.descriptionHistory)) {
+              uspEmployee.descriptionHistory = [];
+            }
+            uspEmployee.descriptionHistory.push({
+              text: noteToAdd,
+              addedAt: new Date(),
+              addedBy: req.user?.name || "Admin",
+            });
+          }
+        }
+        if (req.body.placeReminder !== undefined) {
+          const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
+          uspEmployee.isReminderActive = isPlace;
+        }
+        if (isActive !== undefined) {
+          uspEmployee.isActive = isActive === true || isActive === 'true';
+        }
+        if (repeatType !== undefined) {
+          uspEmployee.repeatType = repeatType;
+          uspEmployee.scheduleType = repeatType === 'none' ? 'one_time' : 'recurring';
+        }
+        if (req.body.customRepeatMinutes) {
+          uspEmployee.customDurationMinutes = Number(req.body.customRepeatMinutes) || 0;
+        }
+        if (reminderDateTime) {
+          uspEmployee.scheduledDateTime = new Date(reminderDateTime);
+          uspEmployee.scheduledDate = new Date(reminderDateTime);
+        }
+        uspEmployee.cronFired = false;
+        uspEmployee.lastTriggered = null;
+        await uspEmployee.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "USP Reminder updated successfully",
+          data: uspEmployee,
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: "Reminder not found"
@@ -1277,9 +1339,29 @@ export const deleteReminder = async (req, res) => {
     const { reminderId } = req.params;
     const employeeId = req.user.id || req.user._id;
 
-    const reminder = await Reminder.findById(reminderId);
+    const cleanId = String(reminderId).replace(/^(alert_|reminder_)/, '');
+    const reminder = await Reminder.findById(cleanId);
 
     if (!reminder) {
+      const alert = await Alert.findById(cleanId);
+      if (alert) {
+        await Alert.findByIdAndDelete(cleanId);
+        return res.status(200).json({
+          success: true,
+          message: "Alert deleted successfully"
+        });
+      }
+      const uspEmployee = await USPEmployee.findById(cleanId);
+      if (uspEmployee) {
+        uspEmployee.isReminderActive = false;
+        uspEmployee.cronFired = true;
+        uspEmployee.scheduledDateTime = null;
+        await uspEmployee.save();
+        return res.status(200).json({
+          success: true,
+          message: "USP reminder deleted successfully"
+        });
+      }
       return res.status(404).json({
         success: false,
         message: "Reminder not found"
@@ -1293,7 +1375,7 @@ export const deleteReminder = async (req, res) => {
       });
     }
 
-    await Reminder.findByIdAndDelete(reminderId);
+    await Reminder.findByIdAndDelete(cleanId);
 
     res.status(200).json({
       success: true,

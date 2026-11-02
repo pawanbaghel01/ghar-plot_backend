@@ -427,6 +427,7 @@ import { sendPushNotification } from "../utils/sendNotification.js";
 import Admin from "../models/adminAuthSchema.js";
 import Employee from "../models/employeeSchema.js";
 import Reminder from "../models/reminderSchema.js";
+import USPEmployee from "../models/uspEmployeeSchema.js";
 
 // Create a new alert
 export const createAlert = async (req, res) => {
@@ -679,9 +680,59 @@ export const scheduleNotification = async (req, res) => {
 
     // If alertId provided, update existing alert
     if (alertId) {
-      alert = await Alert.findOne({ _id: alertId, userId });
+      const cleanAlertId = String(alertId).replace(/^(alert_|reminder_)/, '');
+      alert = await Alert.findOne({ _id: cleanAlertId, userId });
+      if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+        alert = await Alert.findById(cleanAlertId);
+      }
       
       if (!alert) {
+        // Check USPEmployee
+        const uspEmployee = await USPEmployee.findById(cleanAlertId);
+        if (uspEmployee) {
+          if (title) uspEmployee.reminderTitle = title;
+          if (scheduledDateTime) uspEmployee.scheduledDateTime = new Date(scheduledDateTime);
+          if (alertDate) uspEmployee.scheduledDate = new Date(alertDate);
+          if (alertTime) uspEmployee.scheduledTime = alertTime;
+          const effectiveFreq = repeatFrequency || (repeatDaily ? "daily" : "none");
+          uspEmployee.repeatType = effectiveFreq;
+          uspEmployee.scheduleType = effectiveFreq === 'none' ? 'one_time' : 'recurring';
+          const customMins = Number(customRepeatMinutes || repeatMetadata?.customIntervalMinutes || 0);
+          if (customMins > 0) {
+            uspEmployee.customDurationMinutes = customMins;
+          }
+          uspEmployee.isReminderActive = true;
+          uspEmployee.cronFired = false;
+          uspEmployee.lastTriggered = null;
+          await uspEmployee.save();
+
+          return res.status(200).json({
+            success: true,
+            message: "USP reminder notification scheduled successfully",
+            data: uspEmployee,
+          });
+        }
+
+        // Check Reminder
+        const reminder = await Reminder.findById(cleanAlertId);
+        if (reminder) {
+          if (title) reminder.title = title;
+          if (scheduledDateTime) reminder.reminderDateTime = new Date(scheduledDateTime);
+          const effectiveFreq = repeatFrequency || (repeatDaily ? "daily" : "none");
+          reminder.repeatType = effectiveFreq;
+          reminder.isRepeating = effectiveFreq !== 'none';
+          reminder.isActive = true;
+          reminder.cronFired = false;
+          reminder.status = 'pending';
+          await reminder.save();
+
+          return res.status(200).json({
+            success: true,
+            message: "Reminder notification scheduled successfully",
+            data: reminder,
+          });
+        }
+
         return res.status(404).json({
           success: false,
           message: "Alert not found or unauthorized"
@@ -1092,11 +1143,70 @@ export const getAlerts = async (req, res) => {
 export const getAlertById = async (req, res) => {
   try {
     const { id } = req.params;
+    const cleanId = String(id).replace(/^(alert_|reminder_)/, '');
     const userId = req.user.id;
 
-    const alert = await Alert.findOne({ _id: id, userId });
+    let alert = await Alert.findOne({ _id: cleanId, userId });
+    if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+      alert = await Alert.findById(cleanId);
+    }
 
     if (!alert) {
+      // Check Reminder
+      const reminder = await Reminder.findById(cleanId);
+      if (reminder) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            _id: reminder._id,
+            id: reminder._id,
+            title: reminder.title,
+            reason: reminder.comment || reminder.note || '',
+            date: reminder.reminderDateTime,
+            time: reminder.reminderDateTime ? new Date(reminder.reminderDateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '',
+            scheduledDateTime: reminder.reminderDateTime,
+            repeatFrequency: reminder.repeatType || (reminder.isRepeating ? 'daily' : 'none'),
+            repeatDaily: reminder.repeatType === 'daily',
+            customRepeatMinutes: reminder.customRepeatMinutes || 0,
+            isActive: reminder.isActive,
+            placeReminder: reminder.placeReminder !== false,
+            category: 'reminder',
+          },
+        });
+      }
+
+      // Check USPEmployee
+      const uspEmployee = await USPEmployee.findById(cleanId).populate('employee').populate('category');
+      if (uspEmployee) {
+        const clientName = uspEmployee.employeeType === 'manual'
+          ? (uspEmployee.manualName || 'Team USP Client')
+          : (uspEmployee.employee?.name || 'Team Member');
+        const latestNotes = Array.isArray(uspEmployee.descriptionHistory) && uspEmployee.descriptionHistory.length > 0
+          ? uspEmployee.descriptionHistory[uspEmployee.descriptionHistory.length - 1].text
+          : (uspEmployee.description || '');
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            _id: uspEmployee._id,
+            id: uspEmployee._id,
+            title: uspEmployee.reminderTitle || `Team USP - ${clientName}`,
+            reason: latestNotes,
+            date: uspEmployee.scheduledDate || uspEmployee.scheduledDateTime,
+            time: uspEmployee.scheduledTime || (uspEmployee.scheduledDateTime ? new Date(uspEmployee.scheduledDateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : ''),
+            scheduledDateTime: uspEmployee.scheduledDateTime,
+            repeatFrequency: uspEmployee.repeatType || 'none',
+            repeatDaily: uspEmployee.repeatType === 'daily',
+            customRepeatMinutes: uspEmployee.customDurationMinutes || 0,
+            repeatMetadata: uspEmployee.customDurationMinutes > 0 ? { customIntervalMinutes: uspEmployee.customDurationMinutes } : null,
+            isActive: uspEmployee.isActive,
+            placeReminder: uspEmployee.isReminderActive !== false,
+            category: 'reminder',
+            clientName: clientName,
+          },
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: "Alert not found",
@@ -1328,6 +1438,97 @@ export const editAlert = async (req, res) => {
         });
       }
 
+      // Check if this ID is in the USPEmployee collection
+      const uspEmployee = await USPEmployee.findById(cleanId);
+      if (uspEmployee) {
+        if (title !== undefined && title.trim()) {
+          uspEmployee.reminderTitle = title.trim();
+        }
+
+        // Update comment/description and append to history if changed
+        if (reason !== undefined && reason.trim()) {
+          const noteToAdd = reason.trim();
+          if (noteToAdd !== (uspEmployee.description || '').trim()) {
+            const now = new Date();
+            const timeStr = now.toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            });
+            const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
+            uspEmployee.description = uspEmployee.description
+              ? `${uspEmployee.description.trim()}${appendedEntry}`
+              : noteToAdd;
+
+            if (!Array.isArray(uspEmployee.descriptionHistory)) {
+              uspEmployee.descriptionHistory = [];
+            }
+            uspEmployee.descriptionHistory.push({
+              text: noteToAdd,
+              addedAt: new Date(),
+              addedBy: req.user?.name || "Admin",
+            });
+          }
+        }
+
+        // Handle reminder toggle
+        if (req.body.placeReminder !== undefined) {
+          const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
+          uspEmployee.isReminderActive = isPlace;
+        }
+
+        if (isActive !== undefined) {
+          uspEmployee.isActive = isActive === true || isActive === 'true';
+        }
+
+        // Repeat frequency
+        const effFreq = repeatFrequency || (repeatDaily === true || repeatDaily === 'true' ? 'daily' : 'none');
+        uspEmployee.repeatType = effFreq;
+        uspEmployee.scheduleType = effFreq === 'none' ? 'one_time' : 'recurring';
+
+        const customMins = Number(
+          req.body.customRepeatMinutes ||
+          repeatMetadata?.customIntervalMinutes ||
+          req.body.customDurationMinutes ||
+          0
+        );
+        if (customMins > 0) {
+          uspEmployee.customDurationMinutes = customMins;
+        }
+
+        if (date !== undefined) uspEmployee.scheduledDate = new Date(date);
+        if (time !== undefined) uspEmployee.scheduledTime = time;
+
+        let computedDT = null;
+        if (providedScheduledDateTime) {
+          computedDT = new Date(providedScheduledDateTime);
+        } else if (date && time) {
+          const [h, m] = String(time).split(':');
+          const d = new Date(date);
+          d.setHours(parseInt(h || '0', 10), parseInt(m || '0', 10), 0, 0);
+          computedDT = d;
+        }
+        if (computedDT && !isNaN(computedDT.getTime())) {
+          uspEmployee.scheduledDateTime = computedDT;
+        }
+
+        // Reset cron so next trigger will fire properly
+        uspEmployee.cronFired = false;
+        uspEmployee.lastTriggered = null;
+
+        await uspEmployee.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "USP Reminder updated successfully",
+          data: uspEmployee,
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: "Alert not found or unauthorized",
@@ -1481,6 +1682,21 @@ export const deleteAlert = async (req, res) => {
           data: reminder,
         });
       }
+
+      const uspEmployee = await USPEmployee.findById(cleanId);
+      if (uspEmployee) {
+        uspEmployee.isReminderActive = false;
+        uspEmployee.cronFired = true;
+        uspEmployee.scheduledDateTime = null;
+        await uspEmployee.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "USP reminder cancelled successfully",
+          data: uspEmployee,
+        });
+      }
+
       return res.status(404).json({
         success: false,
         message: "Alert not found or unauthorized",
