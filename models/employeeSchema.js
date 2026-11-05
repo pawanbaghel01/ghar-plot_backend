@@ -20,6 +20,13 @@ const employeeSchema = new mongoose.Schema({
     trim: true,
     match: [/^\d{10,11}$/, 'Please enter a valid 10-11 digit phone number']
   },
+  // Unique Employee Code (e.g. EMP01, EMP02...)
+  employeeCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true
+  },
   role: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Role',

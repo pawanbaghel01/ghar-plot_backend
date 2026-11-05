@@ -6,6 +6,7 @@ import Employee from "../models/employeeSchema.js";
 import Notification from "../models/notificationModel.js";
 import Alert from "../models/alertSchema.js";
 import USPEmployee from "../models/uspEmployeeSchema.js";
+import { extractLatestComment } from "../utils/commentHelper.js";
 import { sendAdminReminderNotification } from "../utils/fcmNotificationService.js";
 
 
@@ -1133,31 +1134,39 @@ export const updateReminder = async (req, res) => {
       if (uspEmployee) {
         if (title !== undefined && title.trim()) uspEmployee.reminderTitle = title.trim();
         if (comment !== undefined || note !== undefined) {
-          const noteToAdd = (comment || note || '').trim();
-          if (noteToAdd && noteToAdd !== (uspEmployee.description || '').trim()) {
-            const now = new Date();
-            const timeStr = now.toLocaleString("en-IN", {
-              timeZone: "Asia/Kolkata",
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            });
-            const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
-            uspEmployee.description = uspEmployee.description
-              ? `${uspEmployee.description.trim()}${appendedEntry}`
-              : noteToAdd;
+          const noteToAdd = extractLatestComment((comment || note || '').trim());
+          if (noteToAdd) {
+            const currentLatest = extractLatestComment(
+              Array.isArray(uspEmployee.descriptionHistory) && uspEmployee.descriptionHistory.length > 0
+                ? uspEmployee.descriptionHistory[uspEmployee.descriptionHistory.length - 1].text
+                : (uspEmployee.description || '')
+            );
 
-            if (!Array.isArray(uspEmployee.descriptionHistory)) {
-              uspEmployee.descriptionHistory = [];
+            if (noteToAdd !== currentLatest) {
+              const now = new Date();
+              const timeStr = now.toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              });
+              const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
+              uspEmployee.description = uspEmployee.description
+                ? `${uspEmployee.description.trim()}${appendedEntry}`
+                : noteToAdd;
+
+              if (!Array.isArray(uspEmployee.descriptionHistory)) {
+                uspEmployee.descriptionHistory = [];
+              }
+              uspEmployee.descriptionHistory.push({
+                text: noteToAdd,
+                addedAt: new Date(),
+                addedBy: req.user?.name || "Admin",
+              });
             }
-            uspEmployee.descriptionHistory.push({
-              text: noteToAdd,
-              addedAt: new Date(),
-              addedBy: req.user?.name || "Admin",
-            });
           }
         }
         if (req.body.placeReminder !== undefined) {

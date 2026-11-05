@@ -428,6 +428,7 @@ import Admin from "../models/adminAuthSchema.js";
 import Employee from "../models/employeeSchema.js";
 import Reminder from "../models/reminderSchema.js";
 import USPEmployee from "../models/uspEmployeeSchema.js";
+import { extractLatestComment } from "../utils/commentHelper.js";
 
 // Create a new alert
 export const createAlert = async (req, res) => {
@@ -1181,9 +1182,10 @@ export const getAlertById = async (req, res) => {
         const clientName = uspEmployee.employeeType === 'manual'
           ? (uspEmployee.manualName || 'Team USP Client')
           : (uspEmployee.employee?.name || 'Team Member');
-        const latestNotes = Array.isArray(uspEmployee.descriptionHistory) && uspEmployee.descriptionHistory.length > 0
+        const rawNotes = Array.isArray(uspEmployee.descriptionHistory) && uspEmployee.descriptionHistory.length > 0
           ? uspEmployee.descriptionHistory[uspEmployee.descriptionHistory.length - 1].text
           : (uspEmployee.description || '');
+        const latestNotes = extractLatestComment(rawNotes || uspEmployee.description || '');
 
         return res.status(200).json({
           success: true,
@@ -1447,31 +1449,39 @@ export const editAlert = async (req, res) => {
 
         // Update comment/description and append to history if changed
         if (reason !== undefined && reason.trim()) {
-          const noteToAdd = reason.trim();
-          if (noteToAdd !== (uspEmployee.description || '').trim()) {
-            const now = new Date();
-            const timeStr = now.toLocaleString("en-IN", {
-              timeZone: "Asia/Kolkata",
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            });
-            const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
-            uspEmployee.description = uspEmployee.description
-              ? `${uspEmployee.description.trim()}${appendedEntry}`
-              : noteToAdd;
+          const noteToAdd = extractLatestComment(reason.trim());
+          if (noteToAdd) {
+            const currentLatest = extractLatestComment(
+              Array.isArray(uspEmployee.descriptionHistory) && uspEmployee.descriptionHistory.length > 0
+                ? uspEmployee.descriptionHistory[uspEmployee.descriptionHistory.length - 1].text
+                : (uspEmployee.description || '')
+            );
 
-            if (!Array.isArray(uspEmployee.descriptionHistory)) {
-              uspEmployee.descriptionHistory = [];
+            if (noteToAdd !== currentLatest) {
+              const now = new Date();
+              const timeStr = now.toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              });
+              const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
+              uspEmployee.description = uspEmployee.description
+                ? `${uspEmployee.description.trim()}${appendedEntry}`
+                : noteToAdd;
+
+              if (!Array.isArray(uspEmployee.descriptionHistory)) {
+                uspEmployee.descriptionHistory = [];
+              }
+              uspEmployee.descriptionHistory.push({
+                text: noteToAdd,
+                addedAt: new Date(),
+                addedBy: req.user?.name || "Admin",
+              });
             }
-            uspEmployee.descriptionHistory.push({
-              text: noteToAdd,
-              addedAt: new Date(),
-              addedBy: req.user?.name || "Admin",
-            });
           }
         }
 

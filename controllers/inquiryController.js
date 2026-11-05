@@ -2,6 +2,8 @@ import Inquiry from "../models/inquirySchema.js";
 import Property from "../models/addProps.js";
 import ManualInquiry from "../models/manualInquirySchema.js";
 import User from "../models/user.js";
+import Admin from "../models/adminAuthSchema.js";
+import Notification from "../models/notificationModel.js";
 import LeadAssignment from "../models/leadAssignmentSchema.js";
 import { sendPushNotification } from "../utils/sendNotification.js";
 
@@ -96,6 +98,7 @@ export const addInquiry = async (req, res) => {
     // 5️⃣ Create new inquiry
     const inquiry = new Inquiry({
       propertyId,
+      customPropertyId: property.customPropertyId || "",
       buyerId,
       ownerId: property.userId, // property owner
       fullName,
@@ -121,8 +124,8 @@ export const addInquiry = async (req, res) => {
             ? property.residentialType
             : property.commercialType;
 
-        const title = "New Property Inquiry 🏠";
-        const body = `You received a new inquiry for your property in ${property.propertyLocation}.
+        const title = `New Property Inquiry (${property.customPropertyId || 'Property'}) 🏠`;
+        const body = `You received a new inquiry for property ${property.customPropertyId || ''} in ${property.propertyLocation}.
 Property Type: ${property.propertyType} (${propertyTypeDetail})
 From: ${fullName}
 Email: ${email}
@@ -153,6 +156,65 @@ Contact: ${contactNumber}`;
           `⚠️ No FCM token found for owner (${owner._id}) - cannot send notification`
         );
       }
+    }
+
+    // 6.5️⃣ Send Notification to Admins (DB + FCM)
+    try {
+      const adminTitle = `🏠 New Inquiry: ${property.customPropertyId || 'Property'}`;
+      const adminBody = `Property: ${property.customPropertyId || property._id} | Loc: ${property.propertyLocation} | Inquirer: ${fullName} (${contactNumber})`;
+      const adminData = {
+        type: "property_inquiry",
+        inquiryId: inquiry._id.toString(),
+        propertyId: property._id.toString(),
+        customPropertyId: property.customPropertyId || "",
+        fullName,
+        email,
+        contactNumber,
+        location: property.propertyLocation,
+      };
+
+      // 1. Save Notification in DB for Admin Inbox
+      await Notification.create({
+        title: adminTitle,
+        message: adminBody,
+        type: "property_inquiry",
+        priority: "high",
+        metadata: {
+          inquiryId: inquiry._id,
+          propertyId: property._id,
+          customPropertyId: property.customPropertyId,
+          buyerName: fullName,
+          buyerPhone: contactNumber,
+          buyerEmail: email,
+          ownerId: property.userId,
+        },
+      });
+
+      // 2. Send Push Notification to all Admins
+      const admins = await Admin.find({
+        $or: [
+          { "fcmTokens.0": { $exists: true } },
+          { fcmToken: { $exists: true, $ne: "", $ne: null } },
+        ],
+      });
+
+      let adminTokens = [];
+      admins.forEach((adm) => {
+        if (adm.fcmToken) adminTokens.push(adm.fcmToken);
+        if (Array.isArray(adm.fcmTokens)) {
+          adm.fcmTokens.forEach((t) => {
+            if (t.token) adminTokens.push(t.token);
+          });
+        }
+      });
+      adminTokens = [...new Set(adminTokens.filter(Boolean))];
+
+      if (adminTokens.length > 0) {
+        await sendPushNotification(adminTokens, adminTitle, adminBody, adminData);
+        console.log(`✅ Push notification sent to ${adminTokens.length} admin token(s) for enquiry on ${property.customPropertyId || property._id}`);
+      }
+    } catch (adminNotifErr) {
+      console.error("❌ Admin Notification Error:", adminNotifErr.message);
     }
 
     // 7️⃣ Final Response
@@ -223,8 +285,8 @@ export const getEnquiries = async (req, res) => {
 
     //  Step 2: Fetch enquiries with full populated data
     const enquiries = await Inquiry.find(filter)
-      .populate("buyerId", "fullName email phone avatar city state")
-      .populate("ownerId", "fullName email phone avatar city state")
+      .populate("buyerId", "fullName email phone avatar city state clientCode")
+      .populate("ownerId", "fullName email phone avatar city state clientCode")
       .populate("propertyId");
 
     //  Step 3: Add assignment information to each enquiry
@@ -627,6 +689,54 @@ export const getInquiryComments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch comments",
+      error: error.message,
+    });
+  }
+};
+
+// ==========================================
+// CLIENT: Get inquiries received on own properties
+// ==========================================
+export const getClientReceivedInquiries = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Check if Admin disabled inquiries for this client
+    if (user.canReceiveInquiries === false) {
+      return res.status(200).json({
+        success: true,
+        canReceiveInquiries: false,
+        message: "Inquiries are currently managed directly by Admin for your account.",
+        count: 0,
+        data: [],
+      });
+    }
+
+    // Fetch inquiries received for properties posted by this client
+    const inquiries = await Inquiry.find({ ownerId: userId })
+      .populate("propertyId")
+      .populate("buyerId", "fullName email phone clientCode avatar")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      canReceiveInquiries: true,
+      count: inquiries.length,
+      data: inquiries,
+    });
+  } catch (error) {
+    console.error("Error fetching client received inquiries:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching inquiries",
       error: error.message,
     });
   }

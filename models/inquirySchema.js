@@ -2,12 +2,18 @@ import mongoose from "mongoose";
 
 const inquirySchema = new mongoose.Schema(
   {
-    //  Existing Fields
+    // Property Reference & Unique Custom ID (e.g. CL01P1)
     propertyId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
       required: true,
     },
+    customPropertyId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     buyerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

@@ -231,3 +231,99 @@ export const getSubCategoryCounts = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// ===============================
+// SEARCH: Dynamic Location, Budget & Type Search
+// ===============================
+export const searchProperties = async (req, res) => {
+  try {
+    const {
+      location,
+      minPrice,
+      maxPrice,
+      propertyType,
+      residentialType,
+      purpose,
+      limit,
+    } = req.query;
+
+    const query = {};
+
+    // 1. Location token matching
+    if (location && location.trim()) {
+      const trimmed = location.trim();
+      const tokens = trimmed.split(/[,\s]+/).filter(t => t.length > 1);
+
+      const locationRegexes = [
+        { propertyLocation: { $regex: trimmed, $options: "i" } },
+        { description: { $regex: trimmed, $options: "i" } },
+      ];
+
+      tokens.forEach(token => {
+        locationRegexes.push({ propertyLocation: { $regex: token, $options: "i" } });
+        locationRegexes.push({ description: { $regex: token, $options: "i" } });
+      });
+
+      query.$or = locationRegexes;
+    }
+
+    // 2. Budget / Price filter
+    if (minPrice !== undefined && minPrice !== "" || maxPrice !== undefined && maxPrice !== "") {
+      query.price = {};
+      if (minPrice !== undefined && minPrice !== "") {
+        query.price.$gte = Number(minPrice);
+      }
+      if (maxPrice !== undefined && maxPrice !== "") {
+        query.price.$lte = Number(maxPrice);
+      }
+    }
+
+    // 3. Flat vs Independent Filter
+    if (residentialType) {
+      const typeStr = residentialType.toLowerCase().trim();
+      if (typeStr === "flat" || typeStr === "apartment") {
+        query.residentialType = { $in: ["Apartment", "apartment", "Flat", "flat"] };
+      } else if (typeStr === "independent" || typeStr === "villa" || typeStr === "plot") {
+        query.residentialType = { $in: ["Villa", "villa", "Plot", "plot", "House", "house", "Independent", "independent"] };
+      } else if (typeStr !== "all") {
+        query.residentialType = { $regex: residentialType, $options: "i" };
+      }
+    }
+
+    // 4. Main propertyType (Residential / Commercial)
+    if (propertyType && propertyType.toLowerCase() !== "all") {
+      query.propertyType = { $regex: propertyType, $options: "i" };
+    }
+
+    // 5. Purpose (Buy/Sell/Rent)
+    if (purpose && purpose.toLowerCase() !== "all") {
+      query.purpose = { $regex: purpose, $options: "i" };
+    }
+
+    let propQuery = Property.find(query)
+      .populate("userId", "fullName email phone clientCode")
+      .sort({ createdAt: -1 });
+
+    if (limit && Number(limit) > 0) {
+      propQuery = propQuery.limit(Number(limit));
+    }
+
+    const properties = await propQuery;
+
+    const totalCount = await Property.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      totalCount,
+      count: properties.length,
+      properties,
+    });
+  } catch (error) {
+    console.error("Error searching properties:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error searching properties",
+      error: error.message,
+    });
+  }
+};

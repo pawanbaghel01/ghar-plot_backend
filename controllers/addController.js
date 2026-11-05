@@ -4,6 +4,7 @@ import User from "../models/user.js";
 import axios from "axios"; // We'll use axios to call geocoding API
 import { sendPushNotification } from "../utils/sendNotification.js";
 import dotenv from "dotenv";
+import { generateClientCode } from "../utils/counterHelper.js";
 
 dotenv.config();
 
@@ -310,15 +311,17 @@ export const addProperty = async (req, res) => {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // ✅ SIMPLE SERIAL ID FIX (NO COUNTER)
-      let serialId = user.serialId;
-      if (!serialId) {
-        serialId = Math.floor(1000 + Math.random() * 9000);
-        await User.findByIdAndUpdate(userId, { serialId }, { new: true });
+      // Ensure client has unique clientCode (e.g. CL01, CL02...)
+      let clientCode = user.clientCode;
+      if (!clientCode) {
+        clientCode = await generateClientCode();
+        await User.findByIdAndUpdate(userId, { clientCode });
+        user.clientCode = clientCode;
       }
 
-      const prefix = `S${serialId}`;
-      customPropertyId = `${prefix}-${user.myListingsCount + 1}`;
+      // Count how many properties this client has posted (P1, P2...)
+      const userPropsCount = await Property.countDocuments({ userId });
+      customPropertyId = `${clientCode}P${userPropsCount + 1}`;
     }
 
     // ================== BODY ==================

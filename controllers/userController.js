@@ -7,6 +7,7 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import admin from "../config/firebase.js";
 import UserLeadAssignment from "../models/userLeadAssignmentSchema.js";
+import Inquiry from "../models/inquirySchema.js";
 
 dotenv.config();
 
@@ -119,6 +120,7 @@ export const searchUsers = async (req, res) => {
         { email: { $regex: q, $options: "i" } },
         { phone: { $regex: q, $options: "i" } },
         { phoneNumber: { $regex: q, $options: "i" } },
+        { clientCode: { $regex: q, $options: "i" } },
       ],
     };
 
@@ -157,10 +159,17 @@ export const getUserByToken = async (req, res) => {
     // 3 Count properties added by this user
     const myListingsCount = await Property.countDocuments({ userId });
 
-    // 4 Count number of properties this user has visited (appears in visitedBy)
-    const enquiriesCount = await Property.countDocuments({
-      "visitedBy.userId": userId,
-    });
+    // 4 Count inquiries: if user can receive inquiries, count inquiries received on their posted properties
+    let enquiriesCount = 0;
+    if (user.canReceiveInquiries !== false) {
+      enquiriesCount = await Inquiry.countDocuments({ ownerId: userId });
+    }
+    if (enquiriesCount === 0) {
+      enquiriesCount = await Inquiry.countDocuments({ buyerId: userId });
+      if (enquiriesCount === 0) {
+        enquiriesCount = await Property.countDocuments({ "visitedBy.userId": userId });
+      }
+    }
 
     // 5 Attach counts dynamically
     const userWithCounts = {
@@ -451,3 +460,41 @@ export const updatePassword = async (req, res) => {
 //     res.status(400).json({ success: false, message: "Invalid or expired token" });
 //   }
 // };
+
+// ==========================================
+// ADMIN: Enable/Disable inquiries for a client/user
+// ==========================================
+export const toggleUserInquiries = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { canReceiveInquiries } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const nextState = canReceiveInquiries !== undefined ? Boolean(canReceiveInquiries) : !user.canReceiveInquiries;
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { canReceiveInquiries: nextState } },
+      { new: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Inquiries ${updatedUser.canReceiveInquiries ? 'enabled' : 'disabled'} for ${updatedUser.fullName || updatedUser.email}`,
+      canReceiveInquiries: updatedUser.canReceiveInquiries,
+      user: {
+        id: updatedUser._id,
+        _id: updatedUser._id,
+        fullName: updatedUser.fullName,
+        clientCode: updatedUser.clientCode,
+        canReceiveInquiries: updatedUser.canReceiveInquiries,
+      }
+    });
+  } catch (error) {
+    console.error("Error toggling user inquiries:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};

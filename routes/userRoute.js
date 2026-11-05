@@ -7,24 +7,22 @@ import {
   deleteUser,
   forgetPassword,
   verifyResetToken,
-  updatePassword
+  updatePassword,
+  toggleUserInquiries,
 } from "../controllers/userController.js";
 import { verifyToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-
 router.get("/", getAllUsers);
 router.get("/search", searchUsers);
 router.get("/user", verifyToken, getUserByToken);
+router.put("/toggle-inquiries/:userId", toggleUserInquiries);
 router.put("/:id", updateUser);
 router.delete("/:id", deleteUser);
-
-
 
 router.post("/forget-password", forgetPassword);
 router.post("/reset-password", verifyResetToken);
 router.post("/update-password", updatePassword);
-
 
 export default router;

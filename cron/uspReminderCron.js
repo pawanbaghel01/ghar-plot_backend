@@ -4,6 +4,7 @@ import Admin from "../models/adminAuthSchema.js";
 import Employee from "../models/employeeSchema.js";
 import { sendPushNotification } from "../utils/sendNotification.js";
 import { sendEmployeeDueReminderNotification } from "../utils/fcmNotificationService.js";
+import { extractLatestComment } from "../utils/commentHelper.js";
 
 let socketIo;
 let isProcessingUSPReminders = false;
@@ -60,7 +61,8 @@ export const initUSPReminderCron = (io) => {
             : (usp.employee?.phone || "");
           const categoryName = usp.category?.name || freshUSP.category?.name || "Team USP";
           const reminderTitle = usp.reminderTitle || `Team USP Reminder - ${targetName}`;
-          const reminderNote = usp.description || `Follow-up reminder for ${targetName}`;
+          const latestCommentOnly = extractLatestComment(usp.description || "");
+          const reminderNote = latestCommentOnly || `Follow-up reminder for ${targetName}`;
 
           // Notification card title & body
           const notifCardTitle = reminderTitle;
@@ -109,6 +111,8 @@ export const initUSPReminderCron = (io) => {
                 body: notifCardBody,
                 reminderTitle: reminderTitle,
                 note: reminderNote,
+                reason: reminderNote,
+                alertReason: reminderNote,
                 clientName: targetName,
                 name: targetName,
                 userName: targetName,

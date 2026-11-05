@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { OAuth2Client } from "google-auth-library";
 import dotenv from "dotenv";
 import axios from "axios";
+import { generateClientCode } from "../utils/counterHelper.js";
 
 
 
@@ -162,6 +163,8 @@ export const signup = async (req, res) => {
     const rawPassword = password || Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
+    const clientCode = await generateClientCode();
+
     const newUser = new User({
       fullName,
       email,
@@ -173,6 +176,8 @@ export const signup = async (req, res) => {
       password: hashedPassword,
       isEmailVerified: true,
       isPhoneVerified: true,
+      clientCode,
+      myListingsCount: 0,
     });
 
     const savedUser = await newUser.save();
@@ -185,6 +190,7 @@ export const signup = async (req, res) => {
         email: savedUser.email,
         fullName: savedUser.fullName,
         phone: savedUser.phone,
+        clientCode: savedUser.clientCode,
         role: "user"
       },
       process.env.JWT_SECRET,
@@ -200,6 +206,7 @@ export const signup = async (req, res) => {
         fullName: savedUser.fullName,
         email: savedUser.email,
         phone: savedUser.phone,
+        clientCode: savedUser.clientCode,
       }
     });
   } catch (err) {
@@ -247,6 +254,7 @@ export const loginUser = async (req, res) => {
     email: user.email,
     fullName: user.fullName,
     phone: user.phone,
+    clientCode: user.clientCode,
     role: "user"
   },
   process.env.JWT_SECRET,
@@ -263,6 +271,7 @@ export const loginUser = async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,
+        clientCode: user.clientCode,
         date: user.createdAt, // user registration date
         lastLogin: user.lastLogin, // recently added
       },
@@ -297,37 +306,40 @@ export const googleLogin = async (req, res) => {
     let user = await User.findOne({ email });
 
     if (!user) {
-      // Create new user
+      // Create new user with unique Client Code
+      const clientCode = await generateClientCode();
       user = await User.create({
-        name,
+        fullName: name,
         email,
         googleId: sub,
+        clientCode,
+        myListingsCount: 0,
       });
+    } else if (!user.clientCode) {
+      user.clientCode = await generateClientCode();
+      await user.save();
     }
 
-    // Generate JWT token
-    // const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-    //   expiresIn: "7d",
-    // });
-    
     const token = jwt.sign(
-  {
-    id: user._id,          // ✅ MUST
-    email: user.email,
-    fullName: user.name,
-    role: "user"
-  },
-  process.env.JWT_SECRET,
-  { expiresIn: "7d" }
-);
-
+      {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName || user.name,
+        clientCode: user.clientCode,
+        role: "user"
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     res.status(200).json({
       success: true,
       message: "Google login successful",
       user: {
-        name: user.name,
+        id: user._id,
+        name: user.fullName || user.name,
         email: user.email,
+        clientCode: user.clientCode,
       },
       token,
     });

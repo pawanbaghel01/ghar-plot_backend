@@ -1,11 +1,14 @@
 import express from "express";
 import { verifyToken } from "../middlewares/authMiddleware.js";
-import { addInquiry, deleteInquiry, deleteAllInquiries, getEnquiries, createManualInquiry, getAllManualInquiries, getManualInquiryById, updateManualInquiry, deleteManualInquiry, addCommentToInquiry, getInquiryComments } from "../controllers/inquiryController.js";
+import { addInquiry, deleteInquiry, getClientReceivedInquiries, deleteAllInquiries, getEnquiries, createManualInquiry, getAllManualInquiries, getManualInquiryById, updateManualInquiry, deleteManualInquiry, addCommentToInquiry, getInquiryComments } from "../controllers/inquiryController.js";
 
 const router = express.Router();
 
 // Add inquiry
 router.post("/add", verifyToken, addInquiry);
+
+// Get inquiries received by logged-in client on their properties
+router.get("/my-received", verifyToken, getClientReceivedInquiries);
 
 router.get("/get-enquiries", getEnquiries);
 

@@ -2,6 +2,7 @@ import Employee from "../models/employeeSchema.js";
 import Role from "../models/roleSchema.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { generateEmployeeCode } from "../utils/counterHelper.js";
 
 // Create new employee
 export const createEmployee = async (req, res) => {
@@ -33,11 +34,15 @@ export const createEmployee = async (req, res) => {
     // Handle admin access - store the flag, admin access will be handled by frontend logic
     let finalRole = role;
 
+    // Generate unique Employee Code (e.g. EMP01, EMP02...)
+    const employeeCode = await generateEmployeeCode();
+
     // Create new employee
     const newEmployee = new Employee({
       name,
       email,
       phone,
+      employeeCode,
       role: finalRole,
       password: hashedPassword,
       department,
