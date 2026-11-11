@@ -1,7 +1,27 @@
 /**
  * commentHelper.js
- * Utility to extract only the latest / last comment from a composite history note.
+ * Utility to extract and clean comments from composite history notes.
  */
+
+/**
+ * Strips notification suffix (e.g. "⏰ Scheduled: ... 🔁 Next: ... ⏳ In ...")
+ * while preserving the complete user message and all paragraphs.
+ */
+export const cleanNotificationSuffix = (raw) => {
+  if (!raw || typeof raw !== 'string') return '';
+  let str = raw.trim();
+
+  // Strip client / category headers if prepended to body
+  str = str.replace(/^[👤\s]*Client:[^\n]+(?:\r?\n|$)/gim, '');
+  str = str.replace(/^[🏷️\s]*Category:[^\n]+(?:\r?\n|$)/gim, '');
+
+  // Strip inline or trailing FCM trailer
+  str = str.replace(/\s*⏰\s*Scheduled:[^\n]*(?:\s*🔁\s*Next:[^\n]*)?(?:\s*⏳\s*In[^\n]*)?/gi, '');
+  str = str.replace(/\s*🔁\s*Next:[^\n]*(?:\s*⏳\s*In[^\n]*)?/gi, '');
+  str = str.replace(/\s*⏳\s*In\s+[^\n]*/gi, '');
+
+  return str.trim();
+};
 
 export const extractLatestComment = (raw) => {
   if (!raw || typeof raw !== 'string') return '';
@@ -45,16 +65,12 @@ export const extractLatestComment = (raw) => {
   str = str.replace(/^[🏷️\s]*Category:[^\n]+(?:\r?\n|$)/gim, '');
   str = str.replace(/^📝\s*/gim, '');
 
-  // If there are double newlines, take the latest paragraph
-  const paragraphs = str.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-  if (paragraphs.length > 1) {
-    return paragraphs[paragraphs.length - 1].trim();
-  }
-
-  return str.trim();
+  // Strip notification suffix if attached
+  return cleanNotificationSuffix(str);
 };
 
 export default {
   extractLatestComment,
+  cleanNotificationSuffix,
 };
 
