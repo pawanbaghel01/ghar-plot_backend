@@ -95,7 +95,25 @@ export const loginAdmin = async (req, res) => {
       }
     }
 
-    const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign(
+      {
+        id: admin._id,
+        role: "admin",
+        email: admin.email,
+        fullName: admin.fullName,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "20d" }
+    );
+
+    const refreshToken = jwt.sign(
+      { id: admin._id, role: "admin", type: "refresh" },
+      process.env.JWT_SECRET,
+      { expiresIn: "60d" }
+    );
+
+    admin.refreshToken = refreshToken;
+    await admin.save();
 
     // --------------------------
     // Create Active Session
@@ -116,13 +134,77 @@ export const loginAdmin = async (req, res) => {
         email: admin.email,
         mobileNumber: admin.mobileNumber,
         fcmToken: admin.fcmToken,
+        role: "admin",
       },
       token,
+      refreshToken,
       sessionId: session._id, // optional, for tracking specific session
     });
   } catch (error) {
     console.error("Admin Login Error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// ========================
+// Refresh Admin Token Controller
+// ========================
+export const refreshAdminToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    if (!refreshToken) {
+      return res.status(400).json({ success: false, message: "Refresh token is required" });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: "Invalid or expired refresh token" });
+    }
+
+    const admin = await Admin.findById(decoded.id);
+    if (!admin) {
+      return res.status(404).json({ success: false, message: "Admin not found" });
+    }
+
+    const newToken = jwt.sign(
+      {
+        id: admin._id,
+        role: "admin",
+        email: admin.email,
+        fullName: admin.fullName,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "20d" }
+    );
+
+    const newRefreshToken = jwt.sign(
+      { id: admin._id, role: "admin", type: "refresh" },
+      process.env.JWT_SECRET,
+      { expiresIn: "60d" }
+    );
+
+    admin.refreshToken = newRefreshToken;
+    await admin.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Token refreshed successfully",
+      token: newToken,
+      refreshToken: newRefreshToken,
+      admin: {
+        id: admin._id,
+        fullName: admin.fullName,
+        email: admin.email,
+        mobileNumber: admin.mobileNumber,
+        fcmToken: admin.fcmToken,
+        role: "admin",
+      },
+    });
+  } catch (error) {
+    console.error("Admin Refresh Token Error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
 

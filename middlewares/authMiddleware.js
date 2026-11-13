@@ -19,8 +19,9 @@
 
 
 import jwt from "jsonwebtoken";
+import Admin from "../models/adminAuthSchema.js";
 
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -32,11 +33,23 @@ export const verifyToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // ✅ FIX HERE
+    const userId = decoded.id || decoded._id || decoded.userId;
+    let role = decoded.role;
+
+    // If role is missing or not admin, check if userId exists in Admin model
+    if (!role || (role !== 'admin' && role !== 'superadmin')) {
+      try {
+        const isAdmin = await Admin.exists({ _id: userId });
+        if (isAdmin) {
+          role = 'admin';
+        }
+      } catch (_) {}
+    }
+
     req.user = {
-      id: decoded.id || decoded._id || decoded.userId,
+      id: userId,
       email: decoded.email,
-      role: decoded.role,
+      role: role,
       fullName: decoded.fullName,
     };
 

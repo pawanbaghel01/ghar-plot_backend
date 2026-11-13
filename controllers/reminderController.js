@@ -1377,7 +1377,10 @@ export const deleteReminder = async (req, res) => {
       });
     }
 
-    if (req.user?.role !== 'admin' && reminder.employeeId?.toString() !== employeeId?.toString()) {
+    const Admin = (await import('../models/adminAuthSchema.js')).default;
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || (await Admin.exists({ _id: employeeId }));
+
+    if (!isAdmin && reminder.employeeId?.toString() !== employeeId?.toString()) {
       return res.status(403).json({
         success: false,
         message: "Not authorized to delete this reminder"

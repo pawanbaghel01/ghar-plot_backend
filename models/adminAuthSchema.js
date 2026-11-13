@@ -15,6 +15,7 @@ const adminSchema = new mongoose.Schema({
       updatedAt: { type: Date, default: Date.now },
     },
   ],
+  refreshToken: { type: String, default: "" },
   twoFA: {
     enabled: { type: Boolean, default: false },
     otp: { type: String },

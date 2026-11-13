@@ -1147,8 +1147,10 @@ export const getAlertById = async (req, res) => {
     const cleanId = String(id).replace(/^(alert_|reminder_)/, '');
     const userId = req.user.id;
 
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || (await Admin.exists({ _id: userId }));
+
     let alert = await Alert.findOne({ _id: cleanId, userId });
-    if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+    if (!alert && isAdmin) {
       alert = await Alert.findById(cleanId);
     }
 
@@ -1400,9 +1402,11 @@ export const editAlert = async (req, res) => {
       scheduledDateTime: providedScheduledDateTime,
     } = req.body;
 
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || (await Admin.exists({ _id: userId }));
+
     let alert = await Alert.findOne({ _id: cleanId, userId });
 
-    if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+    if (!alert && isAdmin) {
       alert = await Alert.findById(cleanId);
     }
 
@@ -1676,21 +1680,26 @@ export const deleteAlert = async (req, res) => {
     const { id } = req.params;
     const cleanId = String(id).replace(/^(alert_|reminder_)/, '');
     const userId = req.user.id;
+    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'superadmin' || (await Admin.exists({ _id: userId }));
 
-    let alert = await Alert.findOneAndDelete({ _id: cleanId, userId });
-
-    if (!alert && (req.user?.role === 'admin' || req.user?.role === 'superadmin')) {
+    let alert = null;
+    if (isAdmin) {
       alert = await Alert.findByIdAndDelete(cleanId);
+    } else {
+      alert = await Alert.findOneAndDelete({ _id: cleanId, userId });
     }
 
     if (!alert) {
-      const reminder = await Reminder.findByIdAndDelete(cleanId);
+      const reminder = await Reminder.findById(cleanId);
       if (reminder) {
-        return res.status(200).json({
-          success: true,
-          message: "Reminder deleted successfully",
-          data: reminder,
-        });
+        if (isAdmin || reminder.employeeId?.toString() === userId?.toString()) {
+          await Reminder.findByIdAndDelete(cleanId);
+          return res.status(200).json({
+            success: true,
+            message: "Reminder deleted successfully",
+            data: reminder,
+          });
+        }
       }
 
       const uspEmployee = await USPEmployee.findById(cleanId);

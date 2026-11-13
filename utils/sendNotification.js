@@ -196,6 +196,11 @@ export const sendPushNotification = async (
       }
     },
     apns: {
+      headers: {
+        "apns-push-type": "alert",
+        "apns-priority": "10",
+        "apns-topic": "com.bhoomitechzone.gharplot",
+      },
       payload: {
         aps: {
           alert: {
