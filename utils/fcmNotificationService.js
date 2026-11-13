@@ -69,11 +69,15 @@ export const sendEmployeeDueReminderNotification = async (employeeId, reminderDa
               },
               contentAvailable: true,
               sound: "default",
-              badge: 1
+              badge: 1,
+              "thread-id": `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             }
           },
           headers: {
+            "apns-push-type": "alert",
             "apns-priority": "10",
+            "apns-topic": "com.bhoomitechzone.gharplot",
+            "apns-collapse-id": `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             "apns-expiration": "86400" // 🔥 24 hours.
           }
         }
@@ -359,11 +363,15 @@ export const sendAdminReminderNotification = async (reminderData, employeeData, 
               },
               contentAvailable: true,
               sound: "default",
-              badge: 1
+              badge: 1,
+              "thread-id": `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             }
           },
           headers: {
+            "apns-push-type": "alert",
             "apns-priority": "10",
+            "apns-topic": "com.bhoomitechzone.gharplot",
+            "apns-collapse-id": `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             "apns-expiration": "86400" // 24 hours (same as employee reminder)
           }
         }

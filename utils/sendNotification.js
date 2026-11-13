@@ -153,6 +153,8 @@ export const sendPushNotification = async (
     }
   }
 
+  const uniqueApnsId = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
   const buildMessageForToken = (token) => ({
     token: token,
     notification: {
@@ -200,6 +202,7 @@ export const sendPushNotification = async (
         "apns-push-type": "alert",
         "apns-priority": "10",
         "apns-topic": "com.bhoomitechzone.gharplot",
+        "apns-collapse-id": uniqueApnsId,
       },
       payload: {
         aps: {
@@ -209,7 +212,8 @@ export const sendPushNotification = async (
           },
           sound: "default",
           badge: 1,
-          "content-available": 1
+          "content-available": 1,
+          "thread-id": uniqueApnsId,
         }
       }
     }
