@@ -1,4 +1,5 @@
 import Admin from "../models/adminAuthSchema.js";
+import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
@@ -356,6 +357,136 @@ export const logoutSession = async (req, res) => {
   const { sessionId } = req.params;
   await Session.findByIdAndDelete(sessionId);
   res.json({ message: "Logged out from this session" });
+};
+
+// Logout Admin (removes specific device FCM token, session, and expires device push notifications)
+export const logoutAdmin = async (req, res) => {
+  try {
+    const { deviceId, fcmToken, email, adminId } = req.body || {};
+    let targetAdmin = null;
+
+    // 1. Resolve Admin via JWT if present
+    if (req.user && (req.user.id || req.user._id)) {
+      targetAdmin = await Admin.findById(req.user.id || req.user._id);
+    }
+
+    // 2. Decode token from header if available
+    if (!targetAdmin && req.headers.authorization) {
+      try {
+        const rawToken = req.headers.authorization.replace("Bearer ", "").trim();
+        const decoded = jwt.decode(rawToken);
+        if (decoded && (decoded.id || decoded._id)) {
+          targetAdmin = await Admin.findById(decoded.id || decoded._id);
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback to adminId or email
+    if (!targetAdmin && adminId) {
+      if (mongoose.Types.ObjectId.isValid(adminId)) {
+        targetAdmin = await Admin.findById(adminId);
+      }
+    }
+    if (!targetAdmin && email) {
+      targetAdmin = await Admin.findOne({ email });
+    }
+
+    // 4. Fallback: match by deviceId or fcmToken in fcmTokens
+    if (!targetAdmin && (deviceId || fcmToken)) {
+      targetAdmin = await Admin.findOne({
+        $or: [
+          ...(deviceId ? [{ "fcmTokens.deviceId": deviceId }] : []),
+          ...(fcmToken ? [{ "fcmTokens.token": fcmToken }, { fcmToken: fcmToken }] : []),
+        ],
+      });
+    }
+
+    // 5. If still no admin found, find by active session token
+    if (!targetAdmin && req.headers.authorization) {
+      try {
+        const rawToken = req.headers.authorization.replace("Bearer ", "").trim();
+        const session = await Session.findOne({ token: rawToken });
+        if (session && session.userId) {
+          targetAdmin = await Admin.findById(session.userId);
+        }
+      } catch (_) {}
+    }
+
+    if (!targetAdmin) {
+      return res.status(200).json({
+        success: true,
+        message: "No admin session or device found to logout",
+      });
+    }
+
+    const prevCount = targetAdmin.fcmTokens ? targetAdmin.fcmTokens.length : 0;
+    const cleanDeviceId = (deviceId || "").trim();
+    const cleanFcmToken = (fcmToken || "").trim();
+
+    // Remove the logging out device from fcmTokens
+    if (targetAdmin.fcmTokens && targetAdmin.fcmTokens.length > 0) {
+      targetAdmin.fcmTokens = targetAdmin.fcmTokens.filter((entry) => {
+        if (cleanDeviceId && entry.deviceId && entry.deviceId === cleanDeviceId) {
+          return false;
+        }
+        if (cleanFcmToken && entry.token && entry.token === cleanFcmToken) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // If primary fcmToken matched the logged-out token, re-assign to remaining active or clear
+    if (cleanFcmToken && targetAdmin.fcmToken === cleanFcmToken) {
+      targetAdmin.fcmToken =
+        targetAdmin.fcmTokens && targetAdmin.fcmTokens.length > 0
+          ? targetAdmin.fcmTokens[0].token
+          : "";
+    } else if (!targetAdmin.fcmTokens || targetAdmin.fcmTokens.length === 0) {
+      targetAdmin.fcmToken = "";
+    }
+
+    // Update alerts that were pointing specifically to this device's token
+    if (cleanFcmToken) {
+      try {
+        await Alert.updateMany(
+          { userId: targetAdmin._id, fcmToken: cleanFcmToken },
+          { fcmToken: targetAdmin.fcmToken }
+        );
+      } catch (alertErr) {
+        console.warn("⚠️ Error updating alerts on admin logout:", alertErr.message);
+      }
+    }
+
+    // Also remove active session if authorization header present
+    if (req.headers.authorization) {
+      try {
+        const rawToken = req.headers.authorization.replace("Bearer ", "").trim();
+        await Session.deleteMany({ userId: targetAdmin._id, token: rawToken });
+      } catch (sessionErr) {
+        console.warn("⚠️ Error removing session on admin logout:", sessionErr.message);
+      }
+    }
+
+    await targetAdmin.save();
+
+    console.log(
+      `🚪 [Admin-Logout] Successfully removed device (${cleanDeviceId || cleanFcmToken || "N/A"}) for Admin ${targetAdmin.email} (${prevCount} -> ${targetAdmin.fcmTokens.length} active devices)`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin logged out successfully and device token expired",
+      remainingDevices: targetAdmin.fcmTokens.length,
+    });
+  } catch (error) {
+    console.error("❌ Admin Logout Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during logout",
+      error: error.message,
+    });
+  }
 };
 
 

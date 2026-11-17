@@ -23,5 +23,15 @@ const adminSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+// Auto-sanitize fcmTokens before validation so empty/invalid tokens are silently dropped instead of throwing validation errors
+adminSchema.pre("validate", function (next) {
+  if (Array.isArray(this.fcmTokens)) {
+    this.fcmTokens = this.fcmTokens.filter(
+      (e) => e && typeof e.token === "string" && e.token.trim() !== ""
+    );
+  }
+  next();
+});
+
 const Admin = mongoose.model("Admin", adminSchema);
 export default Admin;

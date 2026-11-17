@@ -1,5 +1,5 @@
 import express from "express";
-import { registerAdmin, loginAdmin, refreshAdminToken, adminChangePassword, sendTwoFAOtp, verifyTwoFAOtp, disableTwoFA ,enableTwoFA, getActiveSessions, logoutSession,adminForgetPassword, adminVerifyOtp, adminResetPassword} from "../controllers/adminAuthController.js";
+import { registerAdmin, loginAdmin, logoutAdmin, refreshAdminToken, adminChangePassword, sendTwoFAOtp, verifyTwoFAOtp, disableTwoFA ,enableTwoFA, getActiveSessions, logoutSession,adminForgetPassword, adminVerifyOtp, adminResetPassword} from "../controllers/adminAuthController.js";
 // import { verifyAdminToken } from "../middlewares/adminAuthMiddleware.js";
 import { verifyToken } from '../middlewares/authMiddleware.js';
 
@@ -10,6 +10,9 @@ router.post("/signup", registerAdmin);
 
 // Login
 router.post("/login", loginAdmin);
+
+// Logout Admin & expire device FCM token
+router.post("/logout", logoutAdmin);
 
 // Refresh Token
 router.post("/refresh-token", refreshAdminToken);

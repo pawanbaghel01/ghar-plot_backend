@@ -108,6 +108,16 @@ const employeeSchema = new mongoose.Schema({
   }
 });
 
+// Auto-sanitize fcmTokens before validation so empty/invalid tokens are silently dropped instead of throwing validation errors
+employeeSchema.pre("validate", function (next) {
+  if (Array.isArray(this.fcmTokens)) {
+    this.fcmTokens = this.fcmTokens.filter(
+      (e) => e && typeof e.token === "string" && e.token.trim() !== ""
+    );
+  }
+  next();
+});
+
 // Update timestamp on save
 employeeSchema.pre('save', function (next) {
   this.updatedAt = Date.now();

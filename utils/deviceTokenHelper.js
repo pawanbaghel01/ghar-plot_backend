@@ -114,6 +114,11 @@ export const manageAdminDeviceTokens = async (
     adminDoc.fcmTokens = [];
   }
 
+  // Sanitize: remove any entry with empty/invalid token
+  adminDoc.fcmTokens = adminDoc.fcmTokens.filter(
+    (e) => e && typeof e.token === "string" && e.token.trim() !== ""
+  );
+
   // Match existing device
   let matchedIndex = -1;
   if (currentDeviceId) {
