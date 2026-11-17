@@ -458,7 +458,10 @@ export const logoutAdmin = async (req, res) => {
       }
     }
 
-    // Also remove active session if authorization header present
+    // Invalidate refresh token in database so no auto-refresh can revive the session
+    targetAdmin.refreshToken = "";
+
+    // Also remove active session
     if (req.headers.authorization) {
       try {
         const rawToken = req.headers.authorization.replace("Bearer ", "").trim();
@@ -466,6 +469,10 @@ export const logoutAdmin = async (req, res) => {
       } catch (sessionErr) {
         console.warn("⚠️ Error removing session on admin logout:", sessionErr.message);
       }
+    } else {
+      try {
+        await Session.deleteMany({ userId: targetAdmin._id });
+      } catch (_) {}
     }
 
     await targetAdmin.save();
