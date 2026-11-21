@@ -148,6 +148,19 @@ const alertSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Edit history to track changes
+    editHistory: [{
+      changesSummary: { type: String, default: "" },
+      details: [{ type: String }],
+      editedAt: { type: Date, default: Date.now },
+      editorName: { type: String, default: "" },
+      editorRole: { type: String, default: "employee" },
+      editedBy: { type: mongoose.Schema.Types.ObjectId }
+    }],
+    lastEditedByName: { type: String, default: "" },
+    lastEditedByRole: { type: String, default: "" },
+    lastEditedAt: { type: Date },
+    lastEditSummary: { type: String, default: "" },
   },
   { timestamps: true }
 );

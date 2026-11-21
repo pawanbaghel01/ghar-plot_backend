@@ -1414,28 +1414,77 @@ export const editAlert = async (req, res) => {
       // Check if this ID is in the Reminder collection
       const reminder = await Reminder.findById(cleanId);
       if (reminder) {
-        if (title !== undefined) reminder.title = title;
-        if (reason !== undefined) {
+        // Resolve editor info
+        let editorName = (req.body.editorName || "").trim();
+        let editorRole = (req.user?.role === "admin" || req.user?.role === "superadmin" || isAdmin) ? "admin" : "employee";
+        if (!editorName) {
+          try {
+            if (editorRole === "admin") {
+              const adminUser = await Admin.findById(userId).select("fullName name email");
+              editorName = adminUser?.fullName || adminUser?.name || adminUser?.email || "Admin";
+            } else {
+              const empUser = await Employee.findById(userId).select("name email");
+              editorName = empUser?.name || empUser?.email || "Employee";
+            }
+          } catch (_) {
+            editorName = editorRole === "admin" ? "Admin" : "Employee";
+          }
+        }
+
+        const changes = [];
+        if (title !== undefined && title.trim() !== "" && title.trim() !== reminder.title) {
+          changes.push(`Title: "${reminder.title || ''}" ➔ "${title.trim()}"`);
+          reminder.title = title.trim();
+        }
+        if (reason !== undefined && reason !== reminder.comment) {
+          changes.push(`Comment/Note updated`);
           reminder.comment = reason;
           reminder.note = reason;
         }
         if (req.body.placeReminder !== undefined) {
           const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
-          reminder.placeReminder = isPlace;
-          if (isPlace) {
-            if (new Date(reminder.reminderDateTime) > new Date()) {
-              reminder.status = 'pending';
-              reminder.cronFired = false;
-              reminder.isActive = true;
+          if (isPlace !== reminder.placeReminder) {
+            changes.push(`Place Reminder: ${reminder.placeReminder} ➔ ${isPlace}`);
+            reminder.placeReminder = isPlace;
+            if (isPlace) {
+              if (new Date(reminder.reminderDateTime) > new Date()) {
+                reminder.status = 'pending';
+                reminder.cronFired = false;
+                reminder.isActive = true;
+              }
+            } else {
+              reminder.isActive = false;
+              reminder.status = 'inactive';
             }
-          } else {
-            reminder.isActive = false;
-            reminder.status = 'inactive';
           }
         }
         if (isActive !== undefined) {
-          reminder.isActive = isActive === true || isActive === 'true';
+          const boolActive = isActive === true || isActive === 'true';
+          if (boolActive !== reminder.isActive) {
+            changes.push(`Active: ${reminder.isActive} ➔ ${boolActive}`);
+            reminder.isActive = boolActive;
+          }
         }
+
+        if (changes.length > 0) {
+          if (!reminder.editHistory) reminder.editHistory = [];
+          reminder.editHistory.push({
+            changesSummary: changes.join("; "),
+            details: changes,
+            editedAt: new Date(),
+            editorName: editorName,
+            editorRole: editorRole,
+            editedBy: userId,
+            editorModel: editorRole === "admin" ? "Admin" : "Employee"
+          });
+          reminder.lastEditedByName = editorName;
+          reminder.lastEditedByRole = editorRole;
+          reminder.lastEditedAt = new Date();
+          reminder.lastEditSummary = changes.join("; ");
+          reminder.lastEditDetails = changes;
+          reminder.cronFired = false;
+        }
+
         await reminder.save();
         return res.status(200).json({
           success: true,

@@ -283,35 +283,52 @@ export const initAlertCron = () => {
           let recipientTokens = [];
           if (alert.userId) {
             try {
-              const adminUser = await Admin.findById(alert.userId).select("fcmTokens fcmToken");
-              if (adminUser) {
-                recipientTokens = adminUser.fcmTokens?.length
-                  ? adminUser.fcmTokens.map(t => t.token || t)
-                  : (adminUser.fcmToken ? [adminUser.fcmToken] : []);
-              } else {
-                const empUser = await Employee.findById(alert.userId).select("fcmTokens fcmToken name adminReminderPopupEnabled");
-                if (empUser) {
-                  const empTokens = empUser.fcmTokens?.length
-                    ? empUser.fcmTokens.map(t => t.token || t)
-                    : (empUser.fcmToken ? [empUser.fcmToken] : []);
-                  recipientTokens.push(...empTokens);
+              // 🔑 Prioritize active verified devices from AdminDevice collection
+              let activeTokensFound = false;
+              try {
+                const AdminDevice = (await import("../models/adminDeviceSchema.js")).default;
+                const activeDevices = await AdminDevice.find({
+                  userId: alert.userId,
+                  isActive: true,
+                }).select("fcmToken");
 
-                  // 🔥 DUAL NOTIFICATION: If admin enabled reminder monitoring for this employee, ALSO notify Admin!
-                  if (empUser.adminReminderPopupEnabled === true) {
-                    try {
-                      const adminUsers = await Admin.find({ isActive: { $ne: false } }).select("fcmTokens fcmToken");
-                      adminUsers.forEach(adm => {
-                        const admTokens = adm.fcmTokens?.length
-                          ? adm.fcmTokens.map(t => t.token || t)
-                          : (adm.fcmToken ? [adm.fcmToken] : []);
-                        recipientTokens.push(...admTokens);
-                      });
-                      console.log(`🔔 [Alert-Cron] Dual notification enabled for employee "${empUser.name}" → Notifying Admin & Employee!`);
-                    } catch (admTokenErr) {
-                      console.warn("⚠️ [Alert-Cron] Failed to fetch admin tokens for dual notification:", admTokenErr.message);
+                if (activeDevices && activeDevices.length > 0) {
+                  recipientTokens = activeDevices.map((d) => d.fcmToken);
+                  activeTokensFound = true;
+                }
+              } catch (_) {}
+
+              if (!activeTokensFound) {
+                const adminUser = await Admin.findById(alert.userId).select("fcmTokens fcmToken");
+                if (adminUser) {
+                  recipientTokens = adminUser.fcmTokens?.length
+                    ? adminUser.fcmTokens.map(t => t.token || t)
+                    : (adminUser.fcmToken ? [adminUser.fcmToken] : []);
+                } else {
+                  const empUser = await Employee.findById(alert.userId).select("fcmTokens fcmToken name adminReminderPopupEnabled");
+                  if (empUser) {
+                    const empTokens = empUser.fcmTokens?.length
+                      ? empUser.fcmTokens.map(t => t.token || t)
+                      : (empUser.fcmToken ? [empUser.fcmToken] : []);
+                    recipientTokens.push(...empTokens);
+
+                    // 🔥 DUAL NOTIFICATION: If admin enabled reminder monitoring for this employee, ALSO notify Admin!
+                    if (empUser.adminReminderPopupEnabled === true) {
+                      try {
+                        const adminUsers = await Admin.find({ isActive: { $ne: false } }).select("fcmTokens fcmToken");
+                        adminUsers.forEach(adm => {
+                          const admTokens = adm.fcmTokens?.length
+                            ? adm.fcmTokens.map(t => t.token || t)
+                            : (adm.fcmToken ? [adm.fcmToken] : []);
+                          recipientTokens.push(...admTokens);
+                        });
+                        console.log(`🔔 [Alert-Cron] Dual notification enabled for employee "${empUser.name}" → Notifying Admin & Employee!`);
+                      } catch (admTokenErr) {
+                        console.warn("⚠️ [Alert-Cron] Failed to fetch admin tokens for dual notification:", admTokenErr.message);
+                      }
                     }
+                    creatorEmployeeName = empUser.name || "";
                   }
-                  creatorEmployeeName = empUser.name || "";
                 }
               }
               if (alert.assignedEmployeeId) {
@@ -425,17 +442,24 @@ export const initAlertCron = () => {
 
           if (targetEmpId) {
             try {
-              const { sendEmployeeDueReminderNotification } = await import("../utils/fcmNotificationService.js");
-              console.log(`📤 [Alert-Cron] Delivering reminder push to Assigned Employee ID: ${targetEmpId}`);
-              await sendEmployeeDueReminderNotification(targetEmpId, {
-                reminderId: alert._id.toString(),
-                title: alert.title || "Reminder Due",
-                clientName: alert.clientName || "",
-                phone: alert.phone || "",
-                location: "Enquiry Reminder",
-                note: alert.reason || "",
-                reminderTime: alert.scheduledDateTime || now
-              });
+              // 🛡️ DEDUP GUARD: If targetEmpId is the same user as alert.userId, Step 1 already sent the push!
+              const isSameAsCreator = alert.userId && targetEmpId.toString() === alert.userId.toString();
+
+              if (!isSameAsCreator) {
+                const { sendEmployeeDueReminderNotification } = await import("../utils/fcmNotificationService.js");
+                console.log(`📤 [Alert-Cron] Delivering reminder push to Assigned Employee ID: ${targetEmpId}`);
+                await sendEmployeeDueReminderNotification(targetEmpId, {
+                  reminderId: alert._id.toString(),
+                  title: alert.title || "Reminder Due",
+                  clientName: alert.clientName || "",
+                  phone: alert.phone || "",
+                  location: "Enquiry Reminder",
+                  note: alert.reason || "",
+                  reminderTime: alert.scheduledDateTime || now
+                });
+              } else {
+                console.log(`⏭️ [Alert-Cron] Skipping duplicate push to targetEmpId ${targetEmpId} (already delivered via Step 1)`);
+              }
 
               // Create in-app Notification for the assigned employee
               const Notification = (await import("../models/notificationModel.js")).default;

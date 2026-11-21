@@ -231,5 +231,35 @@ export const manageAdminDeviceTokens = async (
   // Synchronize primary fcmToken to latest active device
   adminDoc.fcmToken = adminDoc.fcmTokens.length > 0 ? adminDoc.fcmTokens[0].token : "";
 
+  // Synchronize to dedicated AdminDevice collection
+  try {
+    const AdminDevice = (await import("../models/adminDeviceSchema.js")).default;
+    const effectiveInstId = currentDeviceId || `legacy_${newToken.substring(0, 16)}`;
+    const platform = currentDeviceInfo.toLowerCase().includes("android")
+      ? "android"
+      : currentDeviceInfo.toLowerCase().includes("ios")
+      ? "ios"
+      : "unknown";
+
+    await AdminDevice.findOneAndUpdate(
+      { userId: adminDoc._id, installationId: effectiveInstId },
+      {
+        $set: {
+          fcmToken: newToken,
+          platformDeviceId: currentDeviceId,
+          platform,
+          deviceName: currentDeviceInfo || `${platform} App`,
+          isActive: true,
+          lastLoginAt: isLoginEvent ? new Date() : (adminDoc.fcmTokens[0]?.lastLogin || new Date()),
+          lastSeenAt: new Date(),
+          tokenUpdatedAt: new Date(),
+        },
+      },
+      { upsert: true, new: true }
+    );
+  } catch (err) {
+    console.warn("⚠️ [TokenHelper] AdminDevice sync warning:", err.message);
+  }
+
   return adminDoc.fcmTokens;
 };

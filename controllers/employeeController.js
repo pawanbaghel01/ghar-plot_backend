@@ -903,3 +903,114 @@ export const getAllSubAdmins = async (req, res) => {
     });
   }
 };
+
+// Logout Employee (removes specific device FCM token and expires device push notifications)
+export const logoutEmployee = async (req, res) => {
+  try {
+    const { deviceId, fcmToken, email, employeeId } = req.body || {};
+    let targetEmployee = null;
+
+    // 1. Resolve Employee via middleware if present
+    if (req.employee && (req.employee.id || req.employee._id)) {
+      targetEmployee = await Employee.findById(req.employee.id || req.employee._id);
+    }
+    if (!targetEmployee && req.user && (req.user.id || req.user._id)) {
+      targetEmployee = await Employee.findById(req.user.id || req.user._id);
+    }
+
+    // 2. Decode token from header if available
+    if (!targetEmployee && req.headers.authorization) {
+      try {
+        const rawToken = req.headers.authorization.replace("Bearer ", "").trim();
+        const decoded = jwt.decode(rawToken);
+        if (decoded && (decoded.id || decoded._id || decoded.userId)) {
+          targetEmployee = await Employee.findById(decoded.id || decoded._id || decoded.userId);
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback to employeeId or email
+    if (!targetEmployee && employeeId) {
+      targetEmployee = await Employee.findById(employeeId);
+    }
+    if (!targetEmployee && email) {
+      targetEmployee = await Employee.findOne({ email });
+    }
+
+    // 4. Fallback: match by deviceId or fcmToken in fcmTokens
+    if (!targetEmployee && (deviceId || fcmToken)) {
+      targetEmployee = await Employee.findOne({
+        $or: [
+          ...(deviceId ? [{ "fcmTokens.deviceId": deviceId }] : []),
+          ...(fcmToken ? [{ "fcmTokens.token": fcmToken }, { fcmToken: fcmToken }] : []),
+        ],
+      });
+    }
+
+    if (!targetEmployee) {
+      return res.status(200).json({
+        success: true,
+        message: "No employee session or device found to logout",
+      });
+    }
+
+    const prevCount = targetEmployee.fcmTokens ? targetEmployee.fcmTokens.length : 0;
+    const cleanDeviceId = (deviceId || "").trim();
+    const cleanFcmToken = (fcmToken || "").trim();
+
+    // Remove the logging out device from fcmTokens
+    if (targetEmployee.fcmTokens && targetEmployee.fcmTokens.length > 0) {
+      targetEmployee.fcmTokens = targetEmployee.fcmTokens.filter((entry) => {
+        if (cleanDeviceId && entry.deviceId && entry.deviceId === cleanDeviceId) {
+          return false;
+        }
+        if (cleanFcmToken && entry.token && entry.token === cleanFcmToken) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // If primary fcmToken matched the logged-out token, re-assign to remaining active or clear
+    if (cleanFcmToken && targetEmployee.fcmToken === cleanFcmToken) {
+      targetEmployee.fcmToken =
+        targetEmployee.fcmTokens && targetEmployee.fcmTokens.length > 0
+          ? targetEmployee.fcmTokens[0].token
+          : "";
+    } else if (!targetEmployee.fcmTokens || targetEmployee.fcmTokens.length === 0) {
+      targetEmployee.fcmToken = "";
+    }
+
+    // Update alerts that were pointing specifically to this device's token
+    if (cleanFcmToken) {
+      try {
+        const Alert = (await import("../models/alertSchema.js")).default;
+        await Alert.updateMany(
+          { userId: targetEmployee._id, fcmToken: cleanFcmToken },
+          { fcmToken: targetEmployee.fcmToken }
+        );
+      } catch (alertErr) {
+        console.warn("⚠️ Error updating alerts on employee logout:", alertErr.message);
+      }
+    }
+
+    await targetEmployee.save();
+
+    console.log(
+      `🚪 [Employee-Logout] Successfully removed device (${cleanDeviceId || cleanFcmToken || "N/A"}) for Employee ${targetEmployee.name || targetEmployee.email} (${prevCount} -> ${targetEmployee.fcmTokens.length} active devices)`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee logged out successfully and device token expired",
+      remainingDevices: targetEmployee.fcmTokens.length,
+    });
+  } catch (error) {
+    console.error("❌ Employee Logout Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during logout",
+      error: error.message,
+    });
+  }
+};

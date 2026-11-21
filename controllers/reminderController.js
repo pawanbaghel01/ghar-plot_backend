@@ -577,142 +577,15 @@ export const createReminder = async (req, res) => {
 
     await reminder.save();
 
-    // ✅ Check if admin notification is enabled for this employee (ONLY if placeReminder is true)
+    // ℹ️ Note: Immediate notification to admin on reminder creation has been disabled as per user requirement.
+    // Admin will only receive due reminder notifications via reminderCron when the scheduled time arrives.
+    /*
     const employee = await Employee.findById(employeeId).select('name email fcmToken adminReminderPopupEnabled');
     if (isPlaceReminder && employee && employee.adminReminderPopupEnabled === true) {
       console.log(`📢 Admin notification enabled for employee: ${employee.name}`);
-
-      // 🔥 ADDITIONAL CHECK: Prevent duplicate admin notifications
-      const recentAdminNotif = await Notification.findOne({
-        type: 'admin_reminder',
-        'metadata.employeeId': employee._id,
-        'metadata.reminderTitle': reminder.title,
-        createdAt: { $gte: new Date(Date.now() - 2 * 60 * 1000) } // Within last 2 minutes
-      });
-      
-      if (recentAdminNotif) {
-        console.log(`⚠️ [AdminNotif] Duplicate admin notification prevented for employee: ${employee.name}`);
-        // Continue without creating admin notification
-      } else {
-        // Create admin notification immediately
-        const adminNotification = new Notification({
-        title: `🔔 New Reminder Set - ${employee.name}`,
-        message: `${employee.name} has set a reminder: ${reminder.title || "Untitled reminder"}`,
-        type: 'admin_reminder',
-        priority: 'high',
-        metadata: {
-          reminderId: `${reminder._id}_new`, // 🔥 Force unique ID for creation
-          employeeId: employee._id,
-          employeeName: employee.name,
-          employeeEmail: employee.email,
-          reminderTitle: reminder.title,
-          clientName: reminder.clientName,
-          phone: reminder.phone,
-          location: reminder.location,
-          note: reminder.comment,
-          reminderTime: reminder.reminderDateTime,
-          createdNow: true // Flag to indicate this is a creation notification
-        },
-        reminderData: {
-          name: reminder.clientName,
-          email: reminder.email,
-          phone: reminder.phone,
-          location: reminder.location,
-          note: reminder.comment,
-          reminderTime: reminder.reminderDateTime,
-        },
-        read: false,
-      });
-
-      await adminNotification.save();
-      console.log(`✅ Admin notification created for new reminder ${reminder._id}`);
-
-      // 🚀 DIRECT FCM SEND (Simplified)
-      try {
-        const admin = (await import('firebase-admin')).default;
-        const Admin = (await import('../models/adminAuthSchema.js')).default;
-
-        // 1. Get all unique admin tokens (including all active devices)
-        const adminUsers = await Admin.find({
-          $or: [{ "fcmTokens.0": { $exists: true } }, { fcmToken: { $exists: true, $ne: "" } }]
-        });
-        const subAdmins = await Employee.find({
-          giveAdminAccess: true,
-          managedEmployees: employeeId,
-          $or: [{ "fcmTokens.0": { $exists: true } }, { fcmToken: { $exists: true, $ne: "" } }]
-        });
-
-        const tokens = new Set();
-        adminUsers.forEach(a => {
-          const list = a.fcmTokens?.length ? a.fcmTokens.map(t => t.token || t).filter(Boolean) : (a.fcmToken ? [a.fcmToken] : []);
-          list.forEach(t => tokens.add(t));
-        });
-        subAdmins.forEach(sa => {
-          const list = sa.fcmTokens?.length ? sa.fcmTokens.map(t => t.token || t).filter(Boolean) : (sa.fcmToken ? [sa.fcmToken] : []);
-          list.forEach(t => tokens.add(t));
-        });
-
-        // Remove employee's own tokens from the list
-        const empTokens = employee.fcmTokens?.length
-          ? employee.fcmTokens.map(t => t.token || t).filter(Boolean)
-          : (employee.fcmToken ? [employee.fcmToken] : []);
-        empTokens.forEach(t => tokens.delete(t));
-
-        console.log(`[Direct-FCM] Sending to ${tokens.size} unique admin devices`);
-
-        // 2. Send to each token (DATA-ONLY like employee reminder for INDIGO theme)
-        for (const token of tokens) {
-          const message = {
-            token: token,
-            // 🔥 DATA-ONLY payload - No 'notification' object
-            // App's FCM handler will use Notifee for INDIGO theme
-            data: {
-              type: "admin_reminder",
-              reminderId: String(reminder._id),
-              title: `🔔 New Reminder Set - ${employee.name}`,
-              body: `${employee.name} set a reminder for ${reminder.clientName}`,
-              clientName: String(reminder.clientName || ""),
-              employeeName: String(employee.name || ""),
-              phone: String(reminder.phone || ""),
-              location: String(reminder.location || ""),
-              note: String(reminder.comment || ""),
-              reminderTime: String(reminder.reminderDateTime || ""),
-              createdBy: String(employee.name || ""),
-              timestamp: String(Date.now())
-            },
-            android: { priority: "high", ttl: 86400 },
-            apns: {
-              payload: { aps: { contentAvailable: true, sound: "default", badge: 1 } },
-              headers: { "apns-priority": "10", "apns-expiration": "86400" }
-            }
-          };
-
-          admin.messaging().send(message)
-            .then(res => console.log(`✅ Direct FCM Sent: ${res}`))
-            .catch(err => console.error(`❌ Direct FCM Error: ${err.message}`));
-        }
-      } catch (fcmErr) {
-        console.error("Direct FCM block error:", fcmErr);
-      }
-
-      // Send Socket.io notification to admin if io is available
-      if (req.io) {
-        req.io.emit("adminReminderNotification", {
-          _id: adminNotification._id,
-          title: adminNotification.title,
-          message: adminNotification.message,
-          type: adminNotification.type,
-          priority: adminNotification.priority,
-          metadata: adminNotification.metadata,
-          reminderData: adminNotification.reminderData,
-          createdAt: adminNotification.createdAt,
-          // Include employeeId so sub-admin clients can self-filter by managedEmployees
-          employeeId: employee._id?.toString(),
-        });
-        console.log(`✅ Socket.io admin notification emitted for new reminder ${reminder._id}`);
-      }
-      } // Close the else block for duplicate check
+      ...
     }
+    */
 
     res.status(201).json({
       success: true,
@@ -1102,9 +975,44 @@ export const updateReminder = async (req, res) => {
       clientName,
       phone,
       email,
-      location
+      location,
+      status
     } = req.body;
-    const employeeId = req.user.id || req.user._id;
+    const editorId = req.user.id || req.user._id;
+
+    // Helper: Resolve editor name and role (Admin or Employee)
+    let editorName = (req.body.editorName || "").trim();
+    let editorRole = (req.user?.role === "admin" || req.user?.role === "superadmin") ? "admin" : "employee";
+    let editorModel = "Employee";
+
+    try {
+      const Admin = (await import("../models/adminAuthSchema.js")).default;
+      const Employee = (await import("../models/employeeSchema.js")).default;
+
+      if (editorRole === "admin") {
+        editorModel = "Admin";
+        if (!editorName) {
+          const adminDoc = await Admin.findById(editorId).select("fullName name email");
+          editorName = adminDoc?.fullName || adminDoc?.name || adminDoc?.email || "Admin";
+        }
+      } else {
+        // Double-check if this ID is in Admin collection
+        const adminDoc = await Admin.findById(editorId).select("fullName name email");
+        if (adminDoc) {
+          editorName = adminDoc.fullName || adminDoc.name || adminDoc.email || "Admin";
+          editorRole = "admin";
+          editorModel = "Admin";
+        } else {
+          const empDoc = await Employee.findById(editorId).select("name email");
+          editorName = empDoc?.name || empDoc?.email || req.user?.fullName || req.user?.email || "Employee";
+          editorRole = "employee";
+          editorModel = "Employee";
+        }
+      }
+    } catch (resolveErr) {
+      console.warn("⚠️ [UpdateReminder] Error resolving editor info:", resolveErr.message);
+      if (!editorName) editorName = req.user?.fullName || req.user?.email || "User";
+    }
 
     const cleanId = String(reminderId).replace(/^(alert_|reminder_)/, '');
     let reminder = await Reminder.findById(cleanId);
@@ -1112,16 +1020,48 @@ export const updateReminder = async (req, res) => {
     if (!reminder) {
       const alert = await Alert.findById(cleanId);
       if (alert) {
-        if (title !== undefined) alert.title = title;
-        if (comment !== undefined || note !== undefined) alert.reason = comment || note;
+        const alertChanges = [];
+        if (title !== undefined && title.trim() !== alert.title) {
+          alertChanges.push(`Title changed from "${alert.title}" to "${title.trim()}"`);
+          alert.title = title.trim();
+        }
+        const effectiveReason = comment !== undefined ? comment : (note !== undefined ? note : undefined);
+        if (effectiveReason !== undefined && effectiveReason !== alert.reason) {
+          alertChanges.push(`Reason/Comment updated`);
+          alert.reason = effectiveReason;
+        }
         if (req.body.placeReminder !== undefined) {
           const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
-          alert.placeReminder = isPlace;
-          alert.isActive = isPlace;
+          if (isPlace !== alert.placeReminder) {
+            alertChanges.push(`Place reminder set to ${isPlace}`);
+            alert.placeReminder = isPlace;
+            alert.isActive = isPlace;
+          }
         }
         if (isActive !== undefined) {
-          alert.isActive = isActive === true || isActive === 'true';
+          const boolActive = isActive === true || isActive === 'true';
+          if (boolActive !== alert.isActive) {
+            alertChanges.push(`Active status set to ${boolActive}`);
+            alert.isActive = boolActive;
+          }
         }
+
+        if (alertChanges.length > 0) {
+          if (!alert.editHistory) alert.editHistory = [];
+          alert.editHistory.push({
+            changesSummary: alertChanges.join("; "),
+            details: alertChanges,
+            editedAt: new Date(),
+            editorName: editorName,
+            editorRole: editorRole,
+            editedBy: editorId
+          });
+          alert.lastEditedByName = editorName;
+          alert.lastEditedByRole = editorRole;
+          alert.lastEditedAt = new Date();
+          alert.lastEditSummary = alertChanges.join("; ");
+        }
+
         await alert.save();
         return res.status(200).json({
           success: true,
@@ -1153,7 +1093,7 @@ export const updateReminder = async (req, res) => {
                 minute: "2-digit",
                 hour12: true,
               });
-              const appendedEntry = `\n\n[Update ${timeStr}]:\n${noteToAdd}`;
+              const appendedEntry = `\n\n[Update ${timeStr} by ${editorName} (${editorRole})]:\n${noteToAdd}`;
               uspEmployee.description = uspEmployee.description
                 ? `${uspEmployee.description.trim()}${appendedEntry}`
                 : noteToAdd;
@@ -1164,7 +1104,7 @@ export const updateReminder = async (req, res) => {
               uspEmployee.descriptionHistory.push({
                 text: noteToAdd,
                 addedAt: new Date(),
-                addedBy: req.user?.name || "Admin",
+                addedBy: `${editorName} (${editorRole})`,
               });
             }
           }
@@ -1204,114 +1144,203 @@ export const updateReminder = async (req, res) => {
       });
     }
 
-    // if (reminder.employeeId.toString() !== employeeId.toString()) {
-    //   return res.status(403).json({
-    //     success: false,
-    //     message: "Not authorized to update this reminder"
-    //   });
-    // }
-
     // Store old values for edit history
     const oldContent = {
-      title: reminder.title,
-      comment: reminder.comment,
+      title: reminder.title || '',
+      comment: reminder.comment || '',
+      note: reminder.note || '',
       reminderDateTime: reminder.reminderDateTime,
-      clientName: reminder.clientName,
-      phone: reminder.phone,
-      location: reminder.location
+      clientName: reminder.clientName || '',
+      phone: reminder.phone || '',
+      email: reminder.email || '',
+      location: reminder.location || '',
+      status: reminder.status || 'pending',
+      isActive: reminder.isActive,
+      placeReminder: reminder.placeReminder,
+      repeatType: reminder.repeatType || 'none'
     };
 
-    // Track if any content changed
-    let contentChanged = false;
+    // Track specific changes made in this edit
+    const changes = [];
 
-    // Update fields
-    if (title !== undefined && title.trim() !== reminder.title) {
+    // 1. Update Title
+    if (title !== undefined && title.trim() !== "" && title.trim() !== reminder.title) {
+      changes.push(`Title: "${reminder.title || ''}" ➔ "${title.trim()}"`);
       reminder.title = title.trim();
-      contentChanged = true;
     }
-    // Support both comment and note fields
-    const finalComment = comment !== undefined ? comment : (note !== undefined ? note : undefined);
-    if (finalComment !== undefined && finalComment !== reminder.comment) {
-      reminder.comment = finalComment;
-      contentChanged = true;
+
+    // 2. Update Comment / Note (Ensure old comments/notes are NEVER overwritten or deleted)
+    const rawComment = comment !== undefined ? comment : (note !== undefined ? note : undefined);
+    if (rawComment !== undefined) {
+      const newCommentText = String(rawComment).trim();
+      const oldCommentText = String(reminder.comment || reminder.note || "").trim();
+
+      if (newCommentText !== "") {
+        if (newCommentText === oldCommentText) {
+          // Nothing changed
+        } else if (oldCommentText !== "" && newCommentText.includes(oldCommentText)) {
+          // New text already contains the old text (frontend appended)
+          reminder.comment = newCommentText;
+          reminder.note = newCommentText;
+          changes.push(`Comment/Note updated`);
+        } else if (oldCommentText !== "" && oldCommentText.includes(newCommentText)) {
+          // Old text already contains new text, preserve old text completely
+        } else if (oldCommentText !== "") {
+          // New comment does NOT contain old comment.
+          // PRESERVE the old comment and APPEND the new note with author & timestamp!
+          const now = new Date();
+          const timeStr = now.toLocaleString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          });
+          const roleTag = editorRole === "admin"
+            ? `👑 [Admin ${editorName} - ${timeStr}]`
+            : `📝 [${editorName} - ${timeStr}]`;
+
+          const combinedNotes = `${oldCommentText}\n\n${roleTag}:\n${newCommentText}`;
+          reminder.comment = combinedNotes;
+          reminder.note = combinedNotes;
+          changes.push(`New note added: "${newCommentText.substring(0, 50)}${newCommentText.length > 50 ? '...' : ''}"`);
+        } else {
+          // No prior comment existed, save fresh comment
+          reminder.comment = newCommentText;
+          reminder.note = newCommentText;
+          changes.push(`Comment/Note set to "${newCommentText.substring(0, 50)}${newCommentText.length > 50 ? '...' : ''}"`);
+        }
+      }
     }
-    if (reminderDateTime !== undefined && new Date(reminderDateTime).getTime() !== reminder.reminderDateTime.getTime()) {
-      reminder.reminderDateTime = new Date(reminderDateTime);
-      contentChanged = true;
-      
-      // 🔥 If time changed to future, reset status to pending so cron picks it up
-      if (new Date(reminderDateTime) > new Date()) {
-        reminder.status = 'pending';
-        reminder.cronFired = false;
-        console.log(`🔄 [UpdateReminder] Time changed to future - status reset to pending`);
+
+    // 3. Update Reminder Date & Time
+    if (reminderDateTime !== undefined) {
+      const newTime = new Date(reminderDateTime);
+      if (!isNaN(newTime.getTime())) {
+        const currentTimeMillis = reminder.reminderDateTime ? new Date(reminder.reminderDateTime).getTime() : 0;
+        if (newTime.getTime() !== currentTimeMillis) {
+          const oldTimeStr = reminder.reminderDateTime 
+            ? new Date(reminder.reminderDateTime).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) 
+            : "N/A";
+          const newTimeStr = newTime.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+          changes.push(`Reminder Time: ${oldTimeStr} ➔ ${newTimeStr}`);
+          reminder.reminderDateTime = newTime;
+
+          // If time changed to future, reset status to pending so cron picks it up
+          if (newTime > new Date()) {
+            reminder.status = 'pending';
+            reminder.cronFired = false;
+            console.log(`🔄 [UpdateReminder] Time changed to future - status reset to pending`);
+          }
+        }
       }
     }
     
-    // 🔥 NEW: Update client details
-    if (clientName !== undefined && clientName !== reminder.clientName) {
+    // 4. Update Client Details
+    if (clientName !== undefined && clientName.trim() !== (reminder.clientName || "")) {
+      changes.push(`Client Name: "${reminder.clientName || ''}" ➔ "${clientName.trim()}"`);
       reminder.clientName = clientName.trim();
-      contentChanged = true;
     }
-    if (phone !== undefined && phone !== reminder.phone) {
+    if (phone !== undefined && phone.trim() !== (reminder.phone || "")) {
+      changes.push(`Phone: "${reminder.phone || ''}" ➔ "${phone.trim()}"`);
       reminder.phone = phone.trim();
-      contentChanged = true;
     }
-    if (email !== undefined && email !== reminder.email) {
+    if (email !== undefined && email.trim() !== (reminder.email || "")) {
+      changes.push(`Email: "${reminder.email || ''}" ➔ "${email.trim()}"`);
       reminder.email = email.trim();
-      contentChanged = true;
     }
-    if (location !== undefined && location !== reminder.location) {
+    if (location !== undefined && location.trim() !== (reminder.location || "")) {
+      changes.push(`Location: "${reminder.location || ''}" ➔ "${location.trim()}"`);
       reminder.location = location.trim();
-      contentChanged = true;
+    }
+
+    // 5. Update Status
+    if (status !== undefined && status !== reminder.status) {
+      changes.push(`Status: "${reminder.status}" ➔ "${status}"`);
+      reminder.status = status;
     }
     
-    if (isRepeating !== undefined) reminder.isRepeating = isRepeating;
-    if (repeatType !== undefined) {
+    // 6. Update Repeat Settings
+    if (isRepeating !== undefined && isRepeating !== reminder.isRepeating) {
+      changes.push(`Repeat: ${reminder.isRepeating} ➔ ${isRepeating}`);
+      reminder.isRepeating = isRepeating;
+    }
+    if (repeatType !== undefined && repeatType !== reminder.repeatType) {
+      changes.push(`Repeat Type: "${reminder.repeatType || 'none'}" ➔ "${repeatType}"`);
       reminder.repeatType = repeatType;
       if (repeatType !== 'custom' && !String(repeatType).includes('min')) {
         reminder.customRepeatMinutes = 0;
       }
     }
-    if (isActive !== undefined) reminder.isActive = isActive;
+
+    // 7. Update Active / Place Reminder
+    if (isActive !== undefined && isActive !== reminder.isActive) {
+      changes.push(`Active: ${reminder.isActive} ➔ ${isActive}`);
+      reminder.isActive = isActive;
+    }
     if (req.body.placeReminder !== undefined) {
       const isPlaceReminder = req.body.placeReminder === true || req.body.placeReminder === 'true';
-      reminder.placeReminder = isPlaceReminder;
-      if (isPlaceReminder) {
-        if (new Date(reminder.reminderDateTime) > new Date()) {
-          reminder.status = 'pending';
-          reminder.cronFired = false;
-          reminder.isActive = true;
+      if (isPlaceReminder !== reminder.placeReminder) {
+        changes.push(`Place Reminder: ${reminder.placeReminder} ➔ ${isPlaceReminder}`);
+        reminder.placeReminder = isPlaceReminder;
+        if (isPlaceReminder) {
+          if (new Date(reminder.reminderDateTime) > new Date()) {
+            reminder.status = 'pending';
+            reminder.cronFired = false;
+            reminder.isActive = true;
+          }
+        } else {
+          reminder.isActive = false;
+          reminder.status = 'inactive';
         }
-      } else {
-        reminder.isActive = false;
-        reminder.status = 'inactive';
       }
-      contentChanged = true;
     }
 
-    // Add to edit history if content changed
-    if (contentChanged) {
+    // 8. If any content changed, record in edit history and update tracking fields
+    if (changes.length > 0) {
       if (!reminder.editHistory) {
         reminder.editHistory = [];
       }
-      reminder.editHistory.push({
+
+      const editRecord = {
         oldContent: oldContent,
         newContent: {
           title: reminder.title,
           comment: reminder.comment,
+          note: reminder.note,
           reminderDateTime: reminder.reminderDateTime,
           clientName: reminder.clientName,
           phone: reminder.phone,
-          location: reminder.location
+          email: reminder.email,
+          location: reminder.location,
+          status: reminder.status,
+          isActive: reminder.isActive,
+          placeReminder: reminder.placeReminder,
+          repeatType: reminder.repeatType
         },
+        changesSummary: changes.join("; "),
+        details: changes,
         editedAt: new Date(),
-        editedBy: employeeId
-      });
+        editorName: editorName,
+        editorRole: editorRole,
+        editedBy: editorId,
+        editorModel: editorModel
+      };
+
+      reminder.editHistory.push(editRecord);
+
+      // Also set quick-access fields for latest editor
+      reminder.lastEditedByName = editorName;
+      reminder.lastEditedByRole = editorRole;
+      reminder.lastEditedAt = editRecord.editedAt;
+      reminder.lastEditSummary = editRecord.changesSummary;
+      reminder.lastEditDetails = changes;
 
       // 🔥 IMPORTANT: Reset cronFired when content changes so updated data goes in next notification
-      // Schema's pre-save hook only resets for time changes, not title/comment changes
       reminder.cronFired = false;
-      console.log(`🔄 [UpdateReminder] Content changed for "${reminder.title}" - cronFired reset to false`);
+      console.log(`📝 [UpdateReminder] Edit recorded by ${editorRole} "${editorName}" (${editorId}) at ${editRecord.editedAt.toISOString()}: ${editRecord.changesSummary}`);
     }
 
     // Recalculate next trigger if needed
@@ -1334,6 +1363,56 @@ export const updateReminder = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update reminder",
+      error: error.message
+    });
+  }
+};
+
+// Get single reminder by ID (with full details, edit history, employee info)
+export const getReminderById = async (req, res) => {
+  try {
+    const { reminderId } = req.params;
+    const cleanId = String(reminderId).replace(/^(alert_|reminder_)/, '');
+
+    let reminder = await Reminder.findById(cleanId)
+      .populate('employeeId', 'name email phone department')
+      .populate('editHistory.editedBy', 'name email fullName');
+
+    if (!reminder) {
+      const alert = await Alert.findById(cleanId);
+      if (alert) {
+        return res.status(200).json({
+          success: true,
+          data: alert,
+          reminder: alert
+        });
+      }
+
+      const uspEmployee = await USPEmployee.findById(cleanId);
+      if (uspEmployee) {
+        return res.status(200).json({
+          success: true,
+          data: uspEmployee,
+          reminder: uspEmployee
+        });
+      }
+
+      return res.status(404).json({
+        success: false,
+        message: "Reminder not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: reminder,
+      reminder: reminder
+    });
+  } catch (error) {
+    console.error("Error fetching reminder by ID:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch reminder",
       error: error.message
     });
   }
@@ -1617,71 +1696,14 @@ export const createReminderFromLead = async (req, res) => {
 
     await reminder.save();
 
-    // ✅ Notification logic for admin/managers (ONLY if placeReminder is true)
+    // ℹ️ Note: Immediate notification to admin on reminder creation has been disabled as per user requirement.
+    // Admin will only receive due reminder notifications via reminderCron when the scheduled time arrives.
+    /*
     try {
       console.log(`[DEBUG] createReminderFromLead: Checking admin notification status for employee ${employeeId}`);
-      const employee = await Employee.findById(employeeId).select('name email fcmToken adminReminderPopupEnabled');
-
-      if (isPlaceReminder && employee && employee.adminReminderPopupEnabled === true) {
-        console.log(`📢 Admin notification enabled for employee: ${employee.name}. Proceeding to notify admins.`);
-
-        // 1. Create database notification record
-        const adminNotification = new Notification({
-          title: `🔔 New Reminder Set - ${employee.name}`,
-          message: `${employee.name} has set a reminder for ${reminder.clientName}: ${reminder.title || "Follow up"}`,
-          type: 'admin_reminder',
-          priority: 'high',
-          metadata: {
-            reminderId: reminder._id,
-            employeeId: employee._id,
-            employeeName: employee.name,
-            employeeEmail: employee.email,
-            reminderTitle: reminder.title,
-            clientName: reminder.clientName,
-            phone: reminder.phone,
-            location: reminder.location,
-            note: reminder.comment,
-            reminderTime: reminder.reminderDateTime,
-            createdNow: true
-          },
-          reminderData: {
-            name: reminder.clientName,
-            email: reminder.email,
-            phone: reminder.phone,
-            location: reminder.location,
-            note: reminder.comment,
-            reminderTime: reminder.reminderDateTime,
-          },
-          read: false,
-        });
-        await adminNotification.save();
-        console.log(`[DEBUG] createReminderFromLead: DB Notification record saved successfully.`);
-
-        // 2. Send FCM push notification
-        console.log(`[DEBUG] createReminderFromLead: Triggering FCM push via sendAdminReminderNotification...`);
-        const fcmResult = await sendAdminReminderNotification(
-          {
-            title: reminder.title,
-            clientName: reminder.clientName,
-            phone: reminder.phone,
-            location: reminder.location,
-            note: reminder.comment,
-            reminderTime: reminder.reminderDateTime
-          },
-          {
-            employeeName: employee.name,
-            employeeEmail: employee.email,
-            fcmToken: employee.fcmToken
-          },
-          employee._id // managedEmployees filter
-        );
-        console.log(`[DEBUG] createReminderFromLead: FCM notification process finished. Success: ${fcmResult?.success}`);
-      } else {
-        console.log(`[DEBUG] createReminderFromLead: Admin notification SKIPPED. adminReminderPopupEnabled is ${employee?.adminReminderPopupEnabled}`);
-      }
-    } catch (notifErr) {
-      console.error("[ERROR] createReminderFromLead: Failed to send admin creation notification:", notifErr);
-    }
+      ...
+    } catch (notifErr) {}
+    */
 
     res.status(201).json({
       success: true,

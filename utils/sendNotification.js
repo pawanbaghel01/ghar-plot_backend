@@ -31,6 +31,15 @@ export const pruneInvalidFcmToken = async (failedToken) => {
       console.log(`🧹 [FCM-Cleanup] Pruned dead token for Admin: ${adminDoc.email} (${prevCount} -> ${adminDoc.fcmTokens.length} active devices)`);
     }
 
+    // 1b. Deactivate corresponding AdminDevice record
+    try {
+      const AdminDevice = (await import("../models/adminDeviceSchema.js")).default;
+      await AdminDevice.updateMany(
+        { fcmToken: tokenToPrune },
+        { $set: { isActive: false, lastSeenAt: new Date() } }
+      );
+    } catch (_) {}
+
     // 2. Process Employee collection
     const employees = await Employee.find({
       $or: [{ "fcmTokens.token": tokenToPrune }, { fcmToken: tokenToPrune }]
@@ -231,10 +240,9 @@ export const sendPushNotification = async (
       const errorCode = error?.errorInfo?.code || error?.code;
       if (
         errorCode === "messaging/registration-token-not-registered" ||
-        errorCode === "messaging/invalid-registration-token" ||
-        errorCode === "messaging/invalid-argument"
+        errorCode === "messaging/invalid-registration-token"
       ) {
-        // Selective pruning of ONLY this invalid token & primary fcmToken re-sync
+        // Selective pruning of ONLY confirmed dead tokens & primary fcmToken re-sync
         await pruneInvalidFcmToken(token);
 
         if (reminderId) {
@@ -245,6 +253,8 @@ export const sendPushNotification = async (
             console.error("Failed to remove invalid FCM token from reminder DB:", dbErr);
           }
         }
+      } else if (errorCode === "messaging/invalid-argument") {
+        console.warn(`⚠️ FCM invalid-argument error for token ${token.substring(0, 15)}... (payload may have invalid format, token NOT pruned):`, error.message);
       }
 
       return { success: false, token, error };

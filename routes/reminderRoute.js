@@ -8,6 +8,7 @@ import {
   snoozeReminder,
   dismissReminder,
   updateReminder,
+  getReminderById,
   deleteReminder,
   getReminderStats,
   getReminders,
@@ -70,5 +71,8 @@ router.get("/stats", getReminderStats);
 
 // Get reminders by manual inquiry ID
 router.get("/manual-inquiry/:manualInquiryId", getRemindersByManualInquiry);
+
+// Get single reminder by ID (placed after specific GET subpaths)
+router.get("/:reminderId", getReminderById);
 
 export default router;

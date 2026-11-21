@@ -7,6 +7,7 @@ import {
   deleteEmployee,
   updateEmployeePassword,
   employeeLogin,
+  logoutEmployee,
   getEmployeeDashboardStats,
   getEmployeeProfile,
   getEmployeesWithAdminAccess
@@ -22,6 +23,7 @@ const router = express.Router();
 
 // Public routes - no authentication required
 router.post("/login", employeeLogin);
+router.post("/logout", logoutEmployee);
 
 // Protected routes - require authentication
 router.use(verifyEmployeeToken); // Apply authentication to all routes below

@@ -398,28 +398,83 @@ const reminderSchema = new mongoose.Schema(
       maxlength: 500
     },
 
-    // Edit history to track changes
+    // Edit history to track changes (who edited, when, and what changed)
     editHistory: [{
       oldContent: {
         title: String,
         comment: String,
         reminderDateTime: Date,
-        note: String
+        note: String,
+        clientName: String,
+        phone: String,
+        email: String,
+        location: String,
+        status: String,
+        isActive: Boolean,
+        placeReminder: Boolean,
+        repeatType: String
       },
       newContent: {
         title: String,
         comment: String,
         reminderDateTime: Date,
-        note: String
+        note: String,
+        clientName: String,
+        phone: String,
+        email: String,
+        location: String,
+        status: String,
+        isActive: Boolean,
+        placeReminder: Boolean,
+        repeatType: String
       },
+      changesSummary: {
+        type: String,
+        default: ''
+      },
+      details: [{
+        type: String
+      }],
       editedAt: {
         type: Date,
         default: Date.now
       },
+      editorName: {
+        type: String,
+        default: ''
+      },
+      editorRole: {
+        type: String,
+        default: 'employee'
+      },
       editedBy: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Employee'
+        refPath: 'editHistory.editorModel'
+      },
+      editorModel: {
+        type: String,
+        default: 'Employee'
       }
+    }],
+
+    // Quick-access fields for the latest edit
+    lastEditedByName: {
+      type: String,
+      default: ''
+    },
+    lastEditedByRole: {
+      type: String,
+      default: ''
+    },
+    lastEditedAt: {
+      type: Date
+    },
+    lastEditSummary: {
+      type: String,
+      default: ''
+    },
+    lastEditDetails: [{
+      type: String
     }],
 
     // Client information (for display in popups)

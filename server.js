@@ -25,6 +25,7 @@ import revenueRoute from "./routes/revenueRoute.js";
 import userRoute from "./routes/userRoute.js";
 import changePasswordRoute from "./routes/changePasswordRoute.js";
 import adminAuthRoute from "./routes/adminAuthRoute.js";
+import adminDeviceRoute from "./routes/adminDeviceRoute.js";
 import paymentRoute from "./routes/paymentRoute.js"
 import inquiryRoute from "./routes/inquiryRoute.js";
 import reminderRoute from "./routes/reminderRoute.js";
@@ -138,6 +139,7 @@ app.use("/api/properties", revenueRoute);
 app.use("/api/users", userRoute);
 app.use("/api", changePasswordRoute);
 app.use("/admin/notifications", adminNotificationRoute);
+app.use("/admin/devices", adminDeviceRoute);
 app.use("/admin", adminAuthRoute);
 app.use("/api/payment", paymentRoute);
 
@@ -153,6 +155,7 @@ app.use("/application", updateNotificationRoute)
 app.use("/api/contact", contactRoute);
 app.use("/api/roles", roleRoute);
 app.use("/api/employees", employeeRoute);
+app.use("/api/employee", employeeRoute);
 app.use("/employee", employeeRoute); // Employee profile and self-service routes
 app.use("/admin/roles", adminRoleRoute);
 app.use("/admin/employees", adminEmployeeRoute);
@@ -250,4 +253,6 @@ import { initDailyCashFlowCron } from "./cron/dailyCashFlowCron.js";
 initDailyCashFlowCron();
 import { initUSPReminderCron } from "./cron/uspReminderCron.js";
 initUSPReminderCron(io);
+import { initStaleDeviceCleanupCron } from "./cron/staleDeviceCleanupCron.js";
+initStaleDeviceCleanupCron();
 

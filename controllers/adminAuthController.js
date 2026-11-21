@@ -436,6 +436,20 @@ export const logoutAdmin = async (req, res) => {
       });
     }
 
+    // Also deactivate in dedicated AdminDevice collection
+    try {
+      const AdminDevice = (await import("../models/adminDeviceSchema.js")).default;
+      const logoutConditions = [];
+      if (cleanDeviceId) logoutConditions.push({ installationId: cleanDeviceId }, { platformDeviceId: cleanDeviceId });
+      if (cleanFcmToken) logoutConditions.push({ fcmToken: cleanFcmToken });
+      if (logoutConditions.length > 0) {
+        await AdminDevice.updateMany(
+          { userId: targetAdmin._id, $or: logoutConditions },
+          { $set: { isActive: false, lastSeenAt: new Date() } }
+        );
+      }
+    } catch (_) {}
+
     // If primary fcmToken matched the logged-out token, re-assign to remaining active or clear
     if (cleanFcmToken && targetAdmin.fcmToken === cleanFcmToken) {
       targetAdmin.fcmToken =
