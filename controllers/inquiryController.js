@@ -7,67 +7,15 @@ import Notification from "../models/notificationModel.js";
 import LeadAssignment from "../models/leadAssignmentSchema.js";
 import { sendPushNotification } from "../utils/sendNotification.js";
 
-//  Add new Inquiry (prevent duplicates)
-// export const addInquiry = async (req, res) => {
-//   try {
-//     const buyerId = req.user.id; // logged-in user
-//     const { propertyId, fullName, email, contactNumber } = req.body;
-
-//     // 1 Validation
-//     if (!propertyId || !fullName || !email || !contactNumber) {
-//       return res.status(400).json({ message: "All required fields must be filled" });
-//     }
-
-//     // 2 Find property
-//     const property = await Property.findById(propertyId);
-//     if (!property) {
-//       return res.status(404).json({ message: "Property not found" });
-//     }
-
-//     // 3 Prevent owner from sending inquiry to own property
-//     if (property.userId.toString() === buyerId) {
-//       return res.status(400).json({ message: "You cannot inquire about your own property" });
-//     }
-
-//     // 4 Check if inquiry already exists (buyer → same property)
-//     const existingInquiry = await Inquiry.findOne({ buyerId, propertyId });
-//     if (existingInquiry) {
-//       return res.status(400).json({
-//         message: "You have already submitted an inquiry for this property.",
-//         alreadyInquired: true,
-//       });
-//     }
-
-//     // 5 Create new inquiry
-//     const inquiry = new Inquiry({
-//       propertyId,
-//       buyerId,
-//       ownerId: property.userId, // property owner
-//       fullName,
-//       email,
-//       contactNumber,
-//     });
-
-//     await inquiry.save();
-
-//     // 6 Response
-//     res.status(201).json({
-//       message: "Inquiry submitted successfully",
-//       inquiry,
-//     });
-//   } catch (error) {
-//     console.error("Add Inquiry Error:", error);
-//     res.status(500).json({ message: "Server error", error: error.message });
-//   }
-// };
-
+//  Add new Inquiry
 export const addInquiry = async (req, res) => {
   try {
     const buyerId = req.user?.id || req.employee?._id; // Logged-in user or employee
-    const { propertyId, fullName, email, contactNumber } = req.body;
+    const { propertyId, fullName, contactNumber } = req.body;
+    const email = (req.body.email || "").trim();
 
     // 1️⃣ Validation
-    if (!propertyId || !fullName || !email || !contactNumber) {
+    if (!propertyId || !fullName || !contactNumber) {
       return res
         .status(400)
         .json({ message: "All required fields must be filled" });
@@ -102,7 +50,7 @@ export const addInquiry = async (req, res) => {
       buyerId,
       ownerId: property.userId, // property owner
       fullName,
-      email,
+      email: email || "",
       contactNumber,
     });
 
@@ -128,7 +76,7 @@ export const addInquiry = async (req, res) => {
         const body = `You received a new inquiry for property ${property.customPropertyId || ''} in ${property.propertyLocation}.
 Property Type: ${property.propertyType} (${propertyTypeDetail})
 From: ${fullName}
-Email: ${email}
+Email: ${email || 'N/A'}
 Contact: ${contactNumber}`;
 
         const data = {
@@ -137,7 +85,7 @@ Contact: ${contactNumber}`;
           propertyType: property.propertyType,
           propertyTypeDetail,
           fullName,
-          email,
+          email: email || "",
           contactNumber,
         };
 
@@ -168,7 +116,7 @@ Contact: ${contactNumber}`;
         propertyId: property._id.toString(),
         customPropertyId: property.customPropertyId || "",
         fullName,
-        email,
+        email: email || "",
         contactNumber,
         location: property.propertyLocation,
       };
@@ -185,7 +133,7 @@ Contact: ${contactNumber}`;
           customPropertyId: property.customPropertyId,
           buyerName: fullName,
           buyerPhone: contactNumber,
-          buyerEmail: email,
+          buyerEmail: email || "N/A",
           ownerId: property.userId,
         },
       });

@@ -300,9 +300,21 @@ export const searchProperties = async (req, res) => {
       query.purpose = { $regex: purpose, $options: "i" };
     }
 
+    // 6. Sorting (Price Low to High, High to Low, Newest)
+    const { sortBy, sort } = req.query;
+    let sortObj = { createdAt: -1 };
+    const sortVal = String(sortBy || sort || "").toLowerCase().trim();
+    if (sortVal === "price_asc" || sortVal === "low_to_high" || sortVal === "price_low_high" || sortVal === "asc") {
+      sortObj = { price: 1 };
+    } else if (sortVal === "price_desc" || sortVal === "high_to_low" || sortVal === "price_high_low" || sortVal === "desc") {
+      sortObj = { price: -1 };
+    } else if (sortVal === "oldest") {
+      sortObj = { createdAt: 1 };
+    }
+
     let propQuery = Property.find(query)
       .populate("userId", "fullName email phone clientCode")
-      .sort({ createdAt: -1 });
+      .sort(sortObj);
 
     if (limit && Number(limit) > 0) {
       propQuery = propQuery.limit(Number(limit));

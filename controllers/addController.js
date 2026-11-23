@@ -897,3 +897,31 @@ export const updateProperty = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// Toggle Property Featured Status (Admin)
+export const togglePropertyFeatured = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isFeatured } = req.body;
+
+    const property = await Property.findById(id);
+    if (!property) {
+      return res.status(404).json({ success: false, message: "Property not found" });
+    }
+
+    const nextStatus = typeof isFeatured === 'boolean' ? isFeatured : !property.isFeatured;
+    property.isFeatured = nextStatus;
+    property.featuredAt = nextStatus ? new Date() : null;
+    await property.save();
+
+    return res.status(200).json({
+      success: true,
+      message: nextStatus ? "Property marked as Featured successfully" : "Property un-marked from Featured successfully",
+      isFeatured: property.isFeatured,
+      property,
+    });
+  } catch (error) {
+    console.error("Toggle Featured Property Error:", error);
+    return res.status(500).json({ success: false, message: "Server error", error: error.message });
+  }
+};

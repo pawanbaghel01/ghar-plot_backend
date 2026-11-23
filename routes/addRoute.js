@@ -35,7 +35,7 @@
 // export default router;
 
 import express from 'express';
-import { addProperty, getNearbyProperties,deleteProperty, updateProperty, visitProperty,markPropertyAsSold,getSoldProperties,deleteSoldProperty, getMySoldProperties } from '../controllers/addController.js';
+import { addProperty, getNearbyProperties,deleteProperty, updateProperty, visitProperty,markPropertyAsSold,getSoldProperties,deleteSoldProperty, getMySoldProperties, togglePropertyFeatured } from '../controllers/addController.js';
 import  upload  from '../middlewares/addUploads.js';
 import { verifyToken  } from '../middlewares/authMiddleware.js';
 import { verifyAdminToken } from '../middlewares/adminAuthMiddleware.js';
@@ -74,4 +74,9 @@ router.delete('/delete/:id', deleteProperty);
 
 // UPDATE route by property ID
 router.put('/edit/:id', upload.array("photosAndVideo", 10), verifyToken , updateProperty);
+
+// Toggle Featured property
+router.put('/toggle-featured/:id', togglePropertyFeatured);
+router.patch('/:id/toggle-featured', togglePropertyFeatured);
+
 export default router;

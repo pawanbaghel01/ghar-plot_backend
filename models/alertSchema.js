@@ -148,6 +148,16 @@ const alertSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Threaded comment / message history
+    commentHistory: [
+      {
+        text: { type: String, trim: true },
+        authorName: { type: String, default: "" },
+        authorRole: { type: String, default: "employee" },
+        authorId: { type: mongoose.Schema.Types.ObjectId },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     // Edit history to track changes
     editHistory: [{
       changesSummary: { type: String, default: "" },

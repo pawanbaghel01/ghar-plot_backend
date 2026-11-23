@@ -257,6 +257,8 @@ const propertySchema = new mongoose.Schema({
     ],
     postedDate: { type: Date, default: Date.now },
     isSold: { type: Boolean, default: false },
+    isFeatured: { type: Boolean, default: false, index: true },
+    featuredAt: { type: Date, default: null },
 });
 
 // Geospatial index

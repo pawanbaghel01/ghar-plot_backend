@@ -505,6 +505,21 @@ export const receiveEmployeeNotification = async (req, res) => {
       employeeName
     });
 
+    // ℹ️ Immediate notification to admin on reminder creation has been disabled as per user requirement.
+    // Scheduled notifications are delivered by reminderCron/alertCron at the due time.
+    if (
+      notificationType === 'employee_reminder_to_admin' ||
+      notificationType === 'admin_reminder' ||
+      notificationType === 'reminder' ||
+      (message && /created reminder|set reminder|new reminder/i.test(message))
+    ) {
+      console.log('ℹ️ [receiveEmployeeNotification] Skipped immediate reminder creation push to admin (scheduled notifications handled by cron)');
+      return res.status(200).json({
+        success: true,
+        message: 'Reminder creation notification skipped. Scheduled reminder will trigger at due time.'
+      });
+    }
+
     let finalTitle = title;
     const empName = employeeName || req.user?.name || '';
     if (empName && empName !== 'Admin' && empName !== 'Employee' && empName !== 'System') {

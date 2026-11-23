@@ -6,7 +6,7 @@ import Employee from "../models/employeeSchema.js";
 import Notification from "../models/notificationModel.js";
 import Alert from "../models/alertSchema.js";
 import USPEmployee from "../models/uspEmployeeSchema.js";
-import { extractLatestComment } from "../utils/commentHelper.js";
+import { extractLatestComment, buildCommentThread, parseCommentThread, formatCommentDate } from "../utils/commentHelper.js";
 import { sendAdminReminderNotification } from "../utils/fcmNotificationService.js";
 
 
@@ -1026,9 +1026,57 @@ export const updateReminder = async (req, res) => {
           alert.title = title.trim();
         }
         const effectiveReason = comment !== undefined ? comment : (note !== undefined ? note : undefined);
-        if (effectiveReason !== undefined && effectiveReason !== alert.reason) {
-          alertChanges.push(`Reason/Comment updated`);
-          alert.reason = effectiveReason;
+        if (req.body.newComment || req.body.commentHistory || (effectiveReason !== undefined && effectiveReason.trim() !== '')) {
+          if (!Array.isArray(alert.commentHistory)) alert.commentHistory = [];
+          if (alert.commentHistory.length === 0 && alert.reason) {
+            const parsed = parseCommentThread(alert.reason, alert.clientName || 'Employee', 'employee', alert.createdAt || new Date());
+            alert.commentHistory = parsed.length > 0 ? parsed : [{
+              text: alert.reason.trim(),
+              authorName: alert.clientName || 'Employee',
+              authorRole: 'employee',
+              authorId: alert.assignedEmployeeId || alert.userId,
+              createdAt: alert.createdAt || new Date(),
+            }];
+          }
+
+          const trimmedNewComment = (req.body.newComment || "").trim();
+          if (trimmedNewComment) {
+            alert.commentHistory.push({
+              text: trimmedNewComment,
+              authorName: editorName,
+              authorRole: editorRole,
+              authorId: editorId,
+              createdAt: new Date(),
+            });
+            alert.reason = buildCommentThread(alert.commentHistory);
+            alertChanges.push(`New comment added: "${trimmedNewComment}"`);
+          } else if (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0) {
+            alert.commentHistory = req.body.commentHistory;
+            alert.reason = buildCommentThread(alert.commentHistory);
+            alertChanges.push(`Comment history updated`);
+          } else if (effectiveReason !== undefined && effectiveReason.trim() !== '') {
+            const cleanNew = effectiveReason.trim();
+            if (cleanNew.includes('---')) {
+              alert.reason = cleanNew;
+              alert.commentHistory = parseCommentThread(cleanNew, editorName, editorRole, new Date());
+              alertChanges.push(`Comment thread updated`);
+            } else {
+              const lastCommentText = alert.commentHistory.length > 0
+                ? (alert.commentHistory[alert.commentHistory.length - 1].text || '').trim()
+                : '';
+              if (cleanNew !== lastCommentText) {
+                alert.commentHistory.push({
+                  text: cleanNew,
+                  authorName: editorName,
+                  authorRole: editorRole,
+                  authorId: editorId,
+                  createdAt: new Date(),
+                });
+                alert.reason = buildCommentThread(alert.commentHistory);
+                alertChanges.push(`New comment added: "${cleanNew}"`);
+              }
+            }
+          }
         }
         if (req.body.placeReminder !== undefined) {
           const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
@@ -1169,48 +1217,67 @@ export const updateReminder = async (req, res) => {
       reminder.title = title.trim();
     }
 
-    // 2. Update Comment / Note (Ensure old comments/notes are NEVER overwritten or deleted)
-    const rawComment = comment !== undefined ? comment : (note !== undefined ? note : undefined);
-    if (rawComment !== undefined) {
-      const newCommentText = String(rawComment).trim();
-      const oldCommentText = String(reminder.comment || reminder.note || "").trim();
+    // 2. Update Comment / Note with Threaded Comment History
+    if (req.body.newComment || req.body.commentHistory || comment !== undefined || note !== undefined) {
+      if (!Array.isArray(reminder.commentHistory)) {
+        reminder.commentHistory = [];
+      }
+      if (reminder.commentHistory.length === 0 && (reminder.comment || reminder.note)) {
+        const parsed = parseCommentThread(reminder.comment || reminder.note, reminder.clientName || 'Employee', 'employee', reminder.createdAt || new Date());
+        reminder.commentHistory = parsed.length > 0 ? parsed : [{
+          text: (reminder.comment || reminder.note).trim(),
+          authorName: reminder.clientName || 'Employee',
+          authorRole: 'employee',
+          authorId: reminder.employeeId,
+          createdAt: reminder.createdAt || new Date(),
+        }];
+      }
 
-      if (newCommentText !== "") {
-        if (newCommentText === oldCommentText) {
-          // Nothing changed
-        } else if (oldCommentText !== "" && newCommentText.includes(oldCommentText)) {
-          // New text already contains the old text (frontend appended)
-          reminder.comment = newCommentText;
-          reminder.note = newCommentText;
-          changes.push(`Comment/Note updated`);
-        } else if (oldCommentText !== "" && oldCommentText.includes(newCommentText)) {
-          // Old text already contains new text, preserve old text completely
-        } else if (oldCommentText !== "") {
-          // New comment does NOT contain old comment.
-          // PRESERVE the old comment and APPEND the new note with author & timestamp!
-          const now = new Date();
-          const timeStr = now.toLocaleString("en-IN", {
-            timeZone: "Asia/Kolkata",
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-          });
-          const roleTag = editorRole === "admin"
-            ? `👑 [Admin ${editorName} - ${timeStr}]`
-            : `📝 [${editorName} - ${timeStr}]`;
+      const trimmedNewComment = (req.body.newComment || '').trim();
+      const rawComment = comment !== undefined ? comment : (note !== undefined ? note : undefined);
+      const cleanComment = rawComment !== undefined ? String(rawComment).trim() : '';
 
-          const combinedNotes = `${oldCommentText}\n\n${roleTag}:\n${newCommentText}`;
-          reminder.comment = combinedNotes;
-          reminder.note = combinedNotes;
-          changes.push(`New note added: "${newCommentText.substring(0, 50)}${newCommentText.length > 50 ? '...' : ''}"`);
+      if (trimmedNewComment) {
+        reminder.commentHistory.push({
+          text: trimmedNewComment,
+          authorName: editorName,
+          authorRole: editorRole,
+          authorId: editorId,
+          createdAt: new Date(),
+        });
+        const thread = buildCommentThread(reminder.commentHistory);
+        reminder.comment = thread;
+        reminder.note = thread;
+        changes.push('New comment added: ' + trimmedNewComment);
+      } else if (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0) {
+        reminder.commentHistory = req.body.commentHistory;
+        const thread = buildCommentThread(reminder.commentHistory);
+        reminder.comment = thread;
+        reminder.note = thread;
+        changes.push('Comment history updated');
+      } else if (cleanComment) {
+        if (cleanComment.includes('---')) {
+          reminder.comment = cleanComment;
+          reminder.note = cleanComment;
+          reminder.commentHistory = parseCommentThread(cleanComment, editorName, editorRole, new Date());
+          changes.push('Comment thread updated');
         } else {
-          // No prior comment existed, save fresh comment
-          reminder.comment = newCommentText;
-          reminder.note = newCommentText;
-          changes.push(`Comment/Note set to "${newCommentText.substring(0, 50)}${newCommentText.length > 50 ? '...' : ''}"`);
+          const lastCommentText = reminder.commentHistory.length > 0
+            ? (reminder.commentHistory[reminder.commentHistory.length - 1].text || '').trim()
+            : '';
+          if (cleanComment !== lastCommentText) {
+            reminder.commentHistory.push({
+              text: cleanComment,
+              authorName: editorName,
+              authorRole: editorRole,
+              authorId: editorId,
+              createdAt: new Date(),
+            });
+            const thread = buildCommentThread(reminder.commentHistory);
+            reminder.comment = thread;
+            reminder.note = thread;
+            changes.push('New comment added: ' + cleanComment);
+          }
         }
       }
     }

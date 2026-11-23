@@ -428,7 +428,7 @@ import Admin from "../models/adminAuthSchema.js";
 import Employee from "../models/employeeSchema.js";
 import Reminder from "../models/reminderSchema.js";
 import USPEmployee from "../models/uspEmployeeSchema.js";
-import { extractLatestComment } from "../utils/commentHelper.js";
+import { extractLatestComment, buildCommentThread, parseCommentThread, formatCommentDate } from "../utils/commentHelper.js";
 
 // Create a new alert
 export const createAlert = async (req, res) => {
@@ -539,13 +539,32 @@ export const createAlert = async (req, res) => {
       ? (req.body.placeReminder === true || req.body.placeReminder === 'true')
       : true;
 
+    // Resolve creator role & name for threaded commentHistory
+    const creatorRole = (req.user?.role === "admin" || req.user?.role === "superadmin") ? "admin" : "employee";
+    const creatorName = employee?.name || req.user?.name || req.user?.fullName || finalClientName || (creatorRole === "admin" ? "Admin" : "Employee");
+
+    const initialCommentHistory = Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0
+      ? req.body.commentHistory
+      : [
+          {
+            text: reason.trim(),
+            authorName: creatorName,
+            authorRole: creatorRole,
+            authorId: userId,
+            createdAt: new Date(),
+          }
+        ];
+
+    const initialFormattedReason = buildCommentThread(initialCommentHistory) || reason.trim();
+
     // Create new alert
     const newAlert = new Alert({
       userId,
       title,
       date: new Date(date),
       time,
-      reason,
+      reason: initialFormattedReason,
+      commentHistory: initialCommentHistory,
       repeatDaily: finalRepeatDaily,
       isActive: isActive !== undefined ? isActive : true,
       placeReminder: isPlaceReminder,
@@ -1165,6 +1184,9 @@ export const getAlertById = async (req, res) => {
             id: reminder._id,
             title: reminder.title,
             reason: reminder.comment || reminder.note || '',
+            commentHistory: Array.isArray(reminder.commentHistory) && reminder.commentHistory.length > 0
+              ? reminder.commentHistory
+              : parseCommentThread(reminder.comment || reminder.note || '', reminder.clientName || 'Employee', 'employee', reminder.createdAt),
             date: reminder.reminderDateTime,
             time: reminder.reminderDateTime ? new Date(reminder.reminderDateTime).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '',
             scheduledDateTime: reminder.reminderDateTime,
@@ -1217,9 +1239,14 @@ export const getAlertById = async (req, res) => {
       });
     }
 
+    let alertObj = alert.toObject ? alert.toObject() : { ...alert };
+    if (!Array.isArray(alertObj.commentHistory) || alertObj.commentHistory.length === 0) {
+      alertObj.commentHistory = parseCommentThread(alertObj.reason || '', alertObj.clientName || 'Employee', 'employee', alertObj.createdAt);
+    }
+
     res.status(200).json({
       success: true,
-      data: alert,
+      data: alertObj,
     });
   } catch (error) {
     console.error("Error fetching alert:", error);
@@ -1436,10 +1463,66 @@ export const editAlert = async (req, res) => {
           changes.push(`Title: "${reminder.title || ''}" ➔ "${title.trim()}"`);
           reminder.title = title.trim();
         }
-        if (reason !== undefined && reason !== reminder.comment) {
-          changes.push(`Comment/Note updated`);
-          reminder.comment = reason;
-          reminder.note = reason;
+        if (req.body.newComment || req.body.commentHistory || (reason !== undefined && reason.trim() !== '')) {
+          if (!Array.isArray(reminder.commentHistory)) {
+            reminder.commentHistory = [];
+          }
+          if (reminder.commentHistory.length === 0 && (reminder.comment || reminder.note)) {
+            const parsed = parseCommentThread(reminder.comment || reminder.note, reminder.clientName || 'Employee', 'employee', reminder.createdAt || new Date());
+            reminder.commentHistory = parsed.length > 0 ? parsed : [{
+              text: (reminder.comment || reminder.note).trim(),
+              authorName: reminder.clientName || 'Employee',
+              authorRole: 'employee',
+              authorId: reminder.employeeId,
+              createdAt: reminder.createdAt || new Date(),
+            }];
+          }
+
+          const trimmedNewComment = (req.body.newComment || "").trim();
+          if (trimmedNewComment) {
+            reminder.commentHistory.push({
+              text: trimmedNewComment,
+              authorName: editorName,
+              authorRole: editorRole,
+              authorId: userId,
+              createdAt: new Date(),
+            });
+            const thread = buildCommentThread(reminder.commentHistory);
+            reminder.comment = thread;
+            reminder.note = thread;
+            changes.push(`New comment added: "${trimmedNewComment}"`);
+          } else if (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0) {
+            reminder.commentHistory = req.body.commentHistory;
+            const thread = buildCommentThread(reminder.commentHistory);
+            reminder.comment = thread;
+            reminder.note = thread;
+            changes.push(`Comment history updated`);
+          } else if (reason !== undefined && reason.trim() !== '') {
+            const cleanNew = reason.trim();
+            if (cleanNew.includes('---')) {
+              reminder.comment = cleanNew;
+              reminder.note = cleanNew;
+              reminder.commentHistory = parseCommentThread(cleanNew, editorName, editorRole, new Date());
+              changes.push(`Comment thread updated`);
+            } else {
+              const lastCommentText = reminder.commentHistory.length > 0
+                ? (reminder.commentHistory[reminder.commentHistory.length - 1].text || '').trim()
+                : '';
+              if (cleanNew !== lastCommentText) {
+                reminder.commentHistory.push({
+                  text: cleanNew,
+                  authorName: editorName,
+                  authorRole: editorRole,
+                  authorId: userId,
+                  createdAt: new Date(),
+                });
+                const thread = buildCommentThread(reminder.commentHistory);
+                reminder.comment = thread;
+                reminder.note = thread;
+                changes.push(`New comment added: "${cleanNew}"`);
+              }
+            }
+          }
         }
         if (req.body.placeReminder !== undefined) {
           const isPlace = req.body.placeReminder === true || req.body.placeReminder === 'true';
@@ -1611,8 +1694,91 @@ export const editAlert = async (req, res) => {
       alert.time = time;
     }
 
-    if (reason !== undefined) {
-      alert.reason = reason;
+    let editorRole = (req.user?.role === 'admin' || req.user?.role === 'superadmin' || isAdmin) ? 'admin' : 'employee';
+    let editorName = (req.body.editorName || "").trim();
+    if (!editorName) {
+      try {
+        if (editorRole === 'admin') {
+          const adminUser = await Admin.findById(userId).select("fullName name email");
+          editorName = adminUser?.fullName || adminUser?.name || adminUser?.email || "Admin";
+        } else {
+          const empUser = await Employee.findById(userId).select("name email");
+          editorName = empUser?.name || empUser?.email || "Employee";
+        }
+      } catch (_) {
+        editorName = editorRole === "admin" ? "Admin" : "Employee";
+      }
+    }
+
+    // Threaded commentHistory handling
+    if (!Array.isArray(alert.commentHistory)) {
+      alert.commentHistory = [];
+    }
+    if (alert.commentHistory.length === 0 && alert.reason) {
+      const parsed = parseCommentThread(alert.reason, alert.clientName || 'Employee', 'employee', alert.createdAt || new Date());
+      alert.commentHistory = parsed.length > 0 ? parsed : [{
+        text: alert.reason.trim(),
+        authorName: alert.clientName || 'Employee',
+        authorRole: 'employee',
+        authorId: alert.assignedEmployeeId || alert.userId,
+        createdAt: alert.createdAt || new Date(),
+      }];
+    }
+
+    const alertChanges = [];
+    const trimmedNewComment = (req.body.newComment || "").trim();
+    if (trimmedNewComment) {
+      alert.commentHistory.push({
+        text: trimmedNewComment,
+        authorName: editorName,
+        authorRole: editorRole,
+        authorId: userId,
+        createdAt: new Date(),
+      });
+      alert.reason = buildCommentThread(alert.commentHistory);
+      alertChanges.push(`New comment added: "${trimmedNewComment}"`);
+    } else if (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0) {
+      alert.commentHistory = req.body.commentHistory;
+      alert.reason = buildCommentThread(alert.commentHistory);
+      alertChanges.push(`Comment history updated`);
+    } else if (reason !== undefined && reason.trim() !== '') {
+      const cleanNew = reason.trim();
+      if (cleanNew.includes('---')) {
+        alert.reason = cleanNew;
+        alert.commentHistory = parseCommentThread(cleanNew, editorName, editorRole, new Date());
+        alertChanges.push(`Comment thread updated`);
+      } else {
+        const lastCommentText = alert.commentHistory.length > 0
+          ? (alert.commentHistory[alert.commentHistory.length - 1].text || '').trim()
+          : '';
+        if (cleanNew !== lastCommentText) {
+          alert.commentHistory.push({
+            text: cleanNew,
+            authorName: editorName,
+            authorRole: editorRole,
+            authorId: userId,
+            createdAt: new Date(),
+          });
+          alert.reason = buildCommentThread(alert.commentHistory);
+          alertChanges.push(`New comment added: "${cleanNew}"`);
+        }
+      }
+    }
+
+    if (alertChanges.length > 0) {
+      if (!Array.isArray(alert.editHistory)) alert.editHistory = [];
+      alert.editHistory.push({
+        changesSummary: alertChanges.join('; '),
+        details: alertChanges,
+        editedAt: new Date(),
+        editorName,
+        editorRole,
+        editedBy: userId,
+      });
+      alert.lastEditedByName = editorName;
+      alert.lastEditedByRole = editorRole;
+      alert.lastEditedAt = new Date();
+      alert.lastEditSummary = alertChanges.join('; ');
     }
 
     if (repeatFrequency !== undefined) {
@@ -2102,8 +2268,12 @@ export const getActiveEmployeeRemindersForAdmin = async (req, res) => {
 
     const data = alerts.map((alert) => {
       const emp = activeEmployeeMap.get(alert.userId?.toString()) || activeEmployeeMap.get(alert.assignedEmployeeId?.toString()) || null;
+      const parsedComments = Array.isArray(alert.commentHistory) && alert.commentHistory.length > 0
+        ? alert.commentHistory
+        : parseCommentThread(alert.reason || '', emp?.name || alert.clientName || 'Employee', 'employee', alert.createdAt);
       return {
         ...alert,
+        commentHistory: parsedComments,
         employee: emp,
         employeeName: emp?.name || alert.clientName || 'Employee',
         employeeDepartment: emp?.department || '',

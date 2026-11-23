@@ -30,8 +30,15 @@ const inquirySchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: true,
-      match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
+      required: false,
+      default: "",
+      validate: {
+        validator: function (v) {
+          if (!v) return true;
+          return /^\S+@\S+\.\S+$/.test(v);
+        },
+        message: "Please enter a valid email address",
+      },
     },
     contactNumber: {
       type: String,
