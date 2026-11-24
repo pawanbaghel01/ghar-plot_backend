@@ -43,12 +43,19 @@ export const addInquiry = async (req, res) => {
       });
     }
 
-    // 5️⃣ Create new inquiry
+    // 4.5️⃣ Find Property Owner details
+    const owner = await User.findById(property.userId);
+    const ownerName = owner?.fullName || "Property Owner";
+    const ownerPhone = owner?.phone || "";
+
+    // 5️⃣ Create new inquiry (includes both Inquirer/Buyer & Property Owner details)
     const inquiry = new Inquiry({
       propertyId,
       customPropertyId: property.customPropertyId || "",
       buyerId,
       ownerId: property.userId, // property owner
+      ownerName: ownerName,
+      ownerPhone: ownerPhone,
       fullName,
       email: email || "",
       contactNumber,
@@ -59,8 +66,6 @@ export const addInquiry = async (req, res) => {
     // 6️⃣ Send Push Notification to Property Owner
     let fcmTokenFound = false;
     let notificationStatus = "not_sent";
-
-    const owner = await User.findById(property.userId);
 
     if (owner) {
       if (owner.fcmToken) {
@@ -106,10 +111,10 @@ Contact: ${contactNumber}`;
       }
     }
 
-    // 6.5️⃣ Send Notification to Admins (DB + FCM)
+    // 6.5️⃣ Send Notification to Admins (DB + FCM) with both Buyer & Owner Details
     try {
       const adminTitle = `🏠 New Inquiry: ${property.customPropertyId || 'Property'}`;
-      const adminBody = `Property: ${property.customPropertyId || property._id} | Loc: ${property.propertyLocation} | Inquirer: ${fullName} (${contactNumber})`;
+      const adminBody = `Inquirer: ${fullName} (${contactNumber}) | Owner: ${ownerName} (${ownerPhone || 'N/A'}) | Property: ${property.customPropertyId || property.title || property.propertyLocation}`;
       const adminData = {
         type: "property_inquiry",
         inquiryId: inquiry._id.toString(),
@@ -118,6 +123,12 @@ Contact: ${contactNumber}`;
         fullName,
         email: email || "",
         contactNumber,
+        buyerName: fullName,
+        buyerPhone: contactNumber,
+        buyerEmail: email || "",
+        ownerId: property.userId ? property.userId.toString() : "",
+        ownerName: ownerName,
+        ownerPhone: ownerPhone,
         location: property.propertyLocation,
       };
 
@@ -135,6 +146,8 @@ Contact: ${contactNumber}`;
           buyerPhone: contactNumber,
           buyerEmail: email || "N/A",
           ownerId: property.userId,
+          ownerName: ownerName,
+          ownerPhone: ownerPhone || "N/A",
         },
       });
 
@@ -231,11 +244,12 @@ export const getEnquiries = async (req, res) => {
     if (propertyId) filter.propertyId = propertyId;
     if (status) filter.status = status;
 
-    //  Step 2: Fetch enquiries with full populated data
+    //  Step 2: Fetch enquiries with full populated data (newest first)
     const enquiries = await Inquiry.find(filter)
       .populate("buyerId", "fullName email phone avatar city state clientCode")
       .populate("ownerId", "fullName email phone avatar city state clientCode")
-      .populate("propertyId");
+      .populate("propertyId")
+      .sort({ createdAt: -1 });
 
     //  Step 3: Add assignment information to each enquiry
     const enquiriesWithAssignment = await Promise.all(
@@ -245,17 +259,20 @@ export const getEnquiries = async (req, res) => {
           enquiryId: enquiry._id,
           enquiryType: 'Inquiry',
           status: { $in: ['active', 'pending', 'in-progress'] }
-        }).populate('employeeId', 'name email');
+        }).populate('employeeId', 'name fullName email phone');
 
         return {
           ...enquiry.toObject(),
           assignment: assignment ? {
-            employeeId: assignment.employeeId._id,
-            employeeName: assignment.employeeId.name,
-            employeeEmail: assignment.employeeId.email,
+            _id: assignment._id,
+            employeeId: assignment.employeeId?._id || assignment.employeeId,
+            employeeName: assignment.employeeId?.fullName || assignment.employeeId?.name || 'Assigned Employee',
+            employeeEmail: assignment.employeeId?.email || '',
+            employeePhone: assignment.employeeId?.phone || '',
             status: assignment.status,
             assignedDate: assignment.assignedDate,
-            priority: assignment.priority
+            priority: assignment.priority,
+            notes: assignment.notes || '',
           } : null
         };
       })

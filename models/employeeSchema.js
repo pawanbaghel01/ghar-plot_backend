@@ -60,6 +60,17 @@ const employeeSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Attendance & Shift Assignment
+  assignedShift: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Shift',
+    default: null
+  },
+  customShift: {
+    startTime: { type: String, default: null }, // e.g. "09:30"
+    endTime: { type: String, default: null },   // e.g. "18:30"
+    gracePeriodMinutes: { type: Number, default: 15 }
+  },
   giveAdminAccess: {
     type: Boolean,
     default: false

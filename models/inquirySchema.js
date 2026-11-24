@@ -24,6 +24,14 @@ const inquirySchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    ownerName: {
+      type: String,
+      default: "",
+    },
+    ownerPhone: {
+      type: String,
+      default: "",
+    },
     fullName: {
       type: String,
       required: true,

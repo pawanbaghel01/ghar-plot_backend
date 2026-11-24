@@ -238,10 +238,19 @@ export const getEmployeeLeads = async (req, res) => {
         try {
           if (assignment.enquiryType === 'Inquiry') {
             enquiry = await Inquiry.findById(assignment.enquiryId)
-              .populate('buyerId', 'fullName email phone')
-              .populate('propertyId', 'propertyLocation propertyType price description availability');
+              .populate('buyerId', 'fullName email phone clientCode')
+              .populate('ownerId', 'fullName email phone clientCode')
+              .populate('propertyId', 'propertyLocation propertyType price description availability customPropertyId title');
           } else if (assignment.enquiryType === 'ManualInquiry') {
             enquiry = await ManualInquiry.findById(assignment.enquiryId);
+          } else {
+            enquiry = await ManualInquiry.findById(assignment.enquiryId);
+            if (!enquiry) {
+              enquiry = await Inquiry.findById(assignment.enquiryId)
+                .populate('buyerId', 'fullName email phone clientCode')
+                .populate('ownerId', 'fullName email phone clientCode')
+                .populate('propertyId', 'propertyLocation propertyType price description availability customPropertyId title');
+            }
           }
         } catch (error) {
           console.error('Error populating enquiry:', error);
@@ -334,10 +343,19 @@ export const getAllLeadAssignments = async (req, res) => {
         try {
           if (assignment.enquiryType === 'Inquiry') {
             enquiry = await Inquiry.findById(assignment.enquiryId)
-              .populate('buyerId', 'fullName email phone isEmailVerified isPhoneVerified lastLogin')
-              .populate('propertyId', 'propertyLocation propertyType price description availability');
+              .populate('buyerId', 'fullName email phone clientCode isEmailVerified isPhoneVerified lastLogin')
+              .populate('ownerId', 'fullName email phone clientCode')
+              .populate('propertyId', 'propertyLocation propertyType price description availability customPropertyId title');
           } else if (assignment.enquiryType === 'ManualInquiry') {
             enquiry = await ManualInquiry.findById(assignment.enquiryId);
+          } else {
+            enquiry = await ManualInquiry.findById(assignment.enquiryId);
+            if (!enquiry) {
+              enquiry = await Inquiry.findById(assignment.enquiryId)
+                .populate('buyerId', 'fullName email phone clientCode isEmailVerified isPhoneVerified lastLogin')
+                .populate('ownerId', 'fullName email phone clientCode')
+                .populate('propertyId', 'propertyLocation propertyType price description availability customPropertyId title');
+            }
           }
         } catch (error) {
           console.error('Error populating enquiry:', error);

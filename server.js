@@ -59,6 +59,9 @@ import cashFlowRoute from "./routes/cashFlowRoute.js";
 import expenseRoute from "./routes/expenseRoute.js";
 import workStatusRoute from "./routes/workStatusRoute.js";
 import exportRoute from "./routes/exportRoute.js";
+import siteIssueRoute from "./routes/siteIssueRoute.js";
+import siteToolRoute from "./routes/siteToolRoute.js";
+import attendanceRoute from "./routes/attendanceRoute.js";
 // Load environment variables
 dotenv.config();
 
@@ -187,6 +190,12 @@ app.use("/admin/expenses", expenseRoute);
 app.use("/employee/expenses", expenseRoute);
 app.use("/admin/work-status", workStatusRoute);
 app.use("/employee/work-status", workStatusRoute);
+app.use("/admin/site-issues", siteIssueRoute);
+app.use("/employee/site-issues", siteIssueRoute);
+app.use("/admin/site-tools", siteToolRoute);
+app.use("/employee/site-tools", siteToolRoute);
+app.use("/admin/attendance", attendanceRoute);
+app.use("/employee/attendance", attendanceRoute);
 app.use("/admin/export", exportRoute);
 app.use("/employee/export", exportRoute);
 

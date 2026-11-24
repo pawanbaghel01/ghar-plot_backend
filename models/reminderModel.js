@@ -13,4 +13,4 @@ const reminderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("Reminder", reminderSchema);
+export default mongoose.models.Reminder || mongoose.model("Reminder", reminderSchema);
