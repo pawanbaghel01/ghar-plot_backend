@@ -6,6 +6,21 @@ import Employee from "../models/employeeSchema.js";
 import User from "../models/user.js";
 import Inquiry from "../models/inquirySchema.js";
 import ManualInquiry from "../models/manualInquirySchema.js";
+import Admin from "../models/adminAuthSchema.js";
+
+const resolveCommentAuthorName = async (user) => {
+  if (!user) return "Employee";
+  if (user.name || user.fullName) return user.name || user.fullName;
+  try {
+    const emp = await Employee.findById(user.id).select("name fullName email").lean();
+    if (emp) return emp.name || emp.fullName || emp.email || "Employee";
+    const adm = await Admin.findById(user.id).select("fullName name email").lean();
+    if (adm) return adm.fullName || adm.name || adm.email || "Admin";
+    const usr = await User.findById(user.id).select("fullName name email").lean();
+    if (usr) return usr.fullName || usr.name || usr.email || "User";
+  } catch (_) {}
+  return user.email || "Employee";
+};
 
 // Create a new follow-up
 export const createFollowUp = async (req, res) => {
@@ -145,10 +160,11 @@ export const createFollowUp = async (req, res) => {
 
     // Add initial comment if provided
     if (comment) {
+      const authorName = await resolveCommentAuthorName(req.user);
       followUpData.comments = [{
         text: comment,
         commentBy: req.user.id,
-        commentByName: req.user.name || req.user.fullName,
+        commentByName: authorName,
         actionTaken: actionTaken || 'other'
       }];
     }
@@ -470,10 +486,11 @@ export const addFollowUpComment = async (req, res) => {
     console.log("Found follow-up:", followUp._id);
 
     // Add comment
+    const authorName = await resolveCommentAuthorName(req.user);
     const newComment = {
       text,
       commentBy: req.user.id,
-      commentByName: req.user.name || req.user.fullName,
+      commentByName: authorName,
       actionTaken: actionTaken || 'other',
       commentDate: new Date()
     };
@@ -657,10 +674,11 @@ export const createFollowUpFromLead = async (req, res) => {
 
     // Add initial comment if provided
     if (notes && notes.trim()) {
+      const authorName = await resolveCommentAuthorName(req.user);
       followUpData.comments = [{
         text: notes.trim(),
         commentBy: employeeId,
-        commentByName: req.user.name || req.user.fullName || 'Employee',
+        commentByName: authorName,
         actionTaken: 'follow_up_scheduled'
       }];
     }

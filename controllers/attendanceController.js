@@ -2,15 +2,35 @@ import Attendance from "../models/attendanceSchema.js";
 import Shift from "../models/shiftSchema.js";
 import Employee from "../models/employeeSchema.js";
 
-// Helper to format Date into 12-hour string (e.g. "09:35 AM")
+// Helper to format Date into 12-hour IST string (e.g. "12:55 PM")
 const format12Hour = (date) => {
   if (!date) return "";
   const d = new Date(date);
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  return `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+  if (isNaN(d.getTime())) return "";
+  return d
+    .toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .toUpperCase();
+};
+
+// Helper to extract IST date & time parts regardless of server timezone (UTC on cloud)
+const getISTParts = (targetDate = new Date()) => {
+  const d = new Date(targetDate);
+  const istMs = d.getTime() + 5.5 * 60 * 60 * 1000;
+  const ist = new Date(istMs);
+  const year = ist.getUTCFullYear();
+  const month = ist.getUTCMonth() + 1;
+  const day = ist.getUTCDate();
+  const hour = ist.getUTCHours();
+  const minute = ist.getUTCMinutes();
+  const dayOfWeek = ist.getUTCDay();
+  const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const minutesOfDay = hour * 60 + minute;
+  return { year, month, day, hour, minute, dayOfWeek, dateStr, minutesOfDay };
 };
 
 // Helper to parse "HH:mm" into minutes from midnight
@@ -63,13 +83,9 @@ const getEffectiveShift = async (employee) => {
   return defaultShift;
 };
 
-// Helper to get formatted YYYY-MM-DD
+// Helper to get formatted YYYY-MM-DD in IST
 const getDateParts = (targetDate = new Date()) => {
-  const d = new Date(targetDate);
-  const year = d.getFullYear();
-  const month = d.getMonth() + 1;
-  const day = d.getDate();
-  const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const { year, month, day, dateStr } = getISTParts(targetDate);
   return { year, month, day, dateStr };
 };
 
@@ -208,7 +224,7 @@ export const checkIn = async (req, res) => {
     }
 
     const now = new Date();
-    const { year, month, day, dateStr } = getDateParts(now);
+    const { year, month, day, dateStr, minutesOfDay: arrivalMins } = getISTParts(now);
 
     // Check if already checked in today
     let attendance = await Attendance.findOne({ employeeId, dateStr });
@@ -216,26 +232,35 @@ export const checkIn = async (req, res) => {
       return res.status(200).json({
         success: true,
         alreadyCheckedIn: true,
-        message: `Already checked in today at ${attendance.checkIn.timeStr}`,
+        message: `Already checked in today at ${format12Hour(attendance.checkIn.time) || attendance.checkIn.timeStr}`,
         data: attendance,
       });
     }
 
     const shift = await getEffectiveShift(employee);
     const shiftStartMins = parseTimeToMinutes(shift.startTime);
-    const graceMins = shift.gracePeriodMinutes || 15;
-    const arrivalMins = now.getHours() * 60 + now.getMinutes();
+    const graceMins = shift.gracePeriodMinutes ?? 15;
 
     let status = "Present";
     let lateMinutes = 0;
 
-    // Evaluate Late vs On-Time
+    // Evaluate Late vs On-Time (using IST minutes of day)
     if (arrivalMins > shiftStartMins + graceMins) {
       status = "Late";
       lateMinutes = arrivalMins - shiftStartMins;
     }
 
-    const { location, deviceInfo } = req.body || {};
+    const { location, deviceInfo, lateReason, reason, notes } = req.body || {};
+    const finalLateReason = String(lateReason || reason || notes || "").trim();
+
+    if (status === "Late" && !finalLateReason) {
+      return res.status(400).json({
+        success: false,
+        requiresReason: true,
+        lateMinutes,
+        message: `Grace period (${graceMins} mins) has passed. Please add a reason for late check-in.`,
+      });
+    }
 
     if (!attendance) {
       attendance = new Attendance({
@@ -252,6 +277,8 @@ export const checkIn = async (req, res) => {
         },
         status,
         lateMinutes,
+        lateReason: finalLateReason,
+        notes: finalLateReason,
         shiftName: shift.name || "General Day Shift",
         shiftStartTime: shift.startTime,
         shiftEndTime: shift.endTime,
@@ -265,6 +292,8 @@ export const checkIn = async (req, res) => {
       };
       attendance.status = status;
       attendance.lateMinutes = lateMinutes;
+      attendance.lateReason = finalLateReason;
+      attendance.notes = finalLateReason;
       attendance.shiftName = shift.name || "General Day Shift";
       attendance.shiftStartTime = shift.startTime;
       attendance.shiftEndTime = shift.endTime;
@@ -305,9 +334,9 @@ export const checkOut = async (req, res) => {
     const employee = await Employee.findById(employeeId).populate("assignedShift");
     const shift = await getEffectiveShift(employee);
 
-    // Calculate early departure if any
+    // Calculate early departure if any (IST minutes)
     const shiftEndMins = parseTimeToMinutes(shift.endTime);
-    const departureMins = now.getHours() * 60 + now.getMinutes();
+    const { minutesOfDay: departureMins } = getISTParts(now);
     let earlyExitMinutes = 0;
     if (departureMins < shiftEndMins) {
       earlyExitMinutes = shiftEndMins - departureMins;
@@ -334,7 +363,7 @@ export const checkOut = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Checked out successfully! Total working duration: ${hoursWorked} hours`,
+      message: `Checked out successfully! Today's Status: ${attendance.status} (${hoursWorked} hrs)`,
       data: attendance,
     });
   } catch (error) {
@@ -351,7 +380,7 @@ export const getTodayAttendance = async (req, res) => {
     }
 
     const now = new Date();
-    const { dateStr } = getDateParts(now);
+    const { dateStr, dayOfWeek } = getISTParts(now);
 
     const employee = await Employee.findById(employeeId).populate("assignedShift");
     const shift = await getEffectiveShift(employee);
@@ -367,10 +396,13 @@ export const getTodayAttendance = async (req, res) => {
         dateStr,
         isCheckedIn,
         isCheckedOut,
-        checkInTimeStr: attendance?.checkIn?.timeStr || "",
-        checkOutTimeStr: attendance?.checkOut?.timeStr || "",
-        status: attendance?.status || (now.getDay() === 0 ? "Week Off" : "Not Checked In"),
+        checkInTime: attendance?.checkIn?.time || null,
+        checkOutTime: attendance?.checkOut?.time || null,
+        checkInTimeStr: attendance?.checkIn?.time ? format12Hour(attendance.checkIn.time) : (attendance?.checkIn?.timeStr || ""),
+        checkOutTimeStr: attendance?.checkOut?.time ? format12Hour(attendance.checkOut.time) : (attendance?.checkOut?.timeStr || ""),
+        status: attendance?.status || (dayOfWeek === 0 ? "Week Off" : "Not Checked In"),
         lateMinutes: attendance?.lateMinutes || 0,
+        lateReason: attendance?.lateReason || attendance?.notes || "",
         totalWorkingHours: attendance?.totalWorkingHours || 0,
         shift: {
           name: shift.name,
@@ -440,9 +472,10 @@ export const getEmployeeMonthlyAttendance = async (req, res) => {
           day: d,
           dateStr: dateString,
           status: rec.status,
-          checkIn: rec.checkIn?.timeStr || "",
-          checkOut: rec.checkOut?.timeStr || "",
+          checkIn: rec.checkIn?.time ? format12Hour(rec.checkIn.time) : (rec.checkIn?.timeStr || ""),
+          checkOut: rec.checkOut?.time ? format12Hour(rec.checkOut.time) : (rec.checkOut?.timeStr || ""),
           lateMinutes: rec.lateMinutes || 0,
+          lateReason: rec.lateReason || rec.notes || "",
           totalWorkingHours: rec.totalWorkingHours || 0,
           shiftTiming: `${rec.shiftStartTime} - ${rec.shiftEndTime}`,
         });
@@ -570,10 +603,12 @@ export const getAdminMonthlyMatrix = async (req, res) => {
           days.push({
             day: d,
             status: rec.status,
-            checkIn: rec.checkIn?.timeStr || "",
-            checkOut: rec.checkOut?.timeStr || "",
+            checkIn: rec.checkIn?.time ? format12Hour(rec.checkIn.time) : (rec.checkIn?.timeStr || ""),
+            checkOut: rec.checkOut?.time ? format12Hour(rec.checkOut.time) : (rec.checkOut?.timeStr || ""),
             lateMinutes: rec.lateMinutes || 0,
+            lateReason: rec.lateReason || rec.notes || "",
             hours: rec.totalWorkingHours || 0,
+            shiftTiming: rec.shiftStartTime && rec.shiftEndTime ? `${rec.shiftStartTime} - ${rec.shiftEndTime}` : "",
           });
 
           if (rec.status === "Present") present++;

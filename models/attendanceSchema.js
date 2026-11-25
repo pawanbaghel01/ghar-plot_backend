@@ -94,6 +94,10 @@ const attendanceSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    lateReason: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );
