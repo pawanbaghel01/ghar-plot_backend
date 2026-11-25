@@ -342,11 +342,25 @@ export const checkOut = async (req, res) => {
       earlyExitMinutes = shiftEndMins - departureMins;
     }
 
-    // Check if total hours < halfDayThresholdHours (e.g. 4.5 hrs)
-    const halfDayThreshold = shift.halfDayThresholdHours || 4.5;
+    // Evaluate Day Status based on actual working hours vs shift thresholds
+    const shiftStartMins = parseTimeToMinutes(shift.startTime);
+    const shiftDurationHours = Math.max(1, (shiftEndMins - shiftStartMins) / 60);
+    const halfDayThreshold = shift.halfDayThresholdHours || Math.round((shiftDurationHours / 2) * 10) / 10;
+    const fullDayThreshold = Math.min(shift.fullDayHours || 8.0, Math.max(halfDayThreshold, shiftDurationHours - 0.5));
+
     if (hoursWorked < halfDayThreshold) {
+      attendance.status = "Absent";
+    } else if (hoursWorked < fullDayThreshold) {
       attendance.status = "Half Day";
+    } else {
+      attendance.status = attendance.lateMinutes > 0 ? "Late" : "Present";
     }
+
+    const totalWorkedMins = Math.max(0, Math.round(diffMs / 60000));
+    const workedDisplay =
+      totalWorkedMins < 60
+        ? `${totalWorkedMins} mins`
+        : `${Math.floor(totalWorkedMins / 60)}h ${totalWorkedMins % 60}m`;
 
     const { location, deviceInfo } = req.body || {};
 
@@ -363,7 +377,7 @@ export const checkOut = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Checked out successfully! Today's Status: ${attendance.status} (${hoursWorked} hrs)`,
+      message: `Checked out successfully! Today's Status: ${attendance.status} (${workedDisplay})`,
       data: attendance,
     });
   } catch (error) {
