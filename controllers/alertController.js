@@ -539,23 +539,29 @@ export const createAlert = async (req, res) => {
       ? (req.body.placeReminder === true || req.body.placeReminder === 'true')
       : true;
 
-    // Resolve creator role & name for threaded commentHistory
+    const hasClient = Boolean(finalClientName && finalClientName.trim().length > 0);
+
+    // Resolve creator role & name for threaded commentHistory (only for client reminders)
     const creatorRole = (req.user?.role === "admin" || req.user?.role === "superadmin") ? "admin" : "employee";
     const creatorName = employee?.name || req.user?.name || req.user?.fullName || finalClientName || (creatorRole === "admin" ? "Admin" : "Employee");
 
-    const initialCommentHistory = Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0
-      ? req.body.commentHistory
-      : [
-          {
-            text: reason.trim(),
-            authorName: creatorName,
-            authorRole: creatorRole,
-            authorId: userId,
-            createdAt: new Date(),
-          }
-        ];
+    const initialCommentHistory = hasClient
+      ? (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0
+          ? req.body.commentHistory
+          : [
+              {
+                text: reason.trim(),
+                authorName: creatorName,
+                authorRole: creatorRole,
+                authorId: userId,
+                createdAt: new Date(),
+              }
+            ])
+      : [];
 
-    const initialFormattedReason = buildCommentThread(initialCommentHistory) || reason.trim();
+    const initialFormattedReason = hasClient
+      ? (buildCommentThread(initialCommentHistory) || reason.trim())
+      : reason.trim();
 
     // Create new alert
     const newAlert = new Alert({
@@ -1240,8 +1246,22 @@ export const getAlertById = async (req, res) => {
     }
 
     let alertObj = alert.toObject ? alert.toObject() : { ...alert };
-    if (!Array.isArray(alertObj.commentHistory) || alertObj.commentHistory.length === 0) {
-      alertObj.commentHistory = parseCommentThread(alertObj.reason || '', alertObj.clientName || 'Employee', 'employee', alertObj.createdAt);
+    const hasClient = Boolean((alertObj.clientName || '').trim().length > 0 || alertObj.enquiryId);
+    if (hasClient) {
+      if (!Array.isArray(alertObj.commentHistory) || alertObj.commentHistory.length === 0) {
+        alertObj.commentHistory = parseCommentThread(alertObj.reason || '', alertObj.clientName || 'Employee', 'employee', alertObj.createdAt);
+      }
+    } else {
+      if (Array.isArray(alertObj.commentHistory) && alertObj.commentHistory.length > 0) {
+        const combined = alertObj.commentHistory
+          .map((c) => (c && c.text ? String(c.text).trim() : ''))
+          .filter(Boolean)
+          .join('\n\n');
+        if (combined && combined.length > String(alertObj.reason || '').trim().length) {
+          alertObj.reason = combined;
+        }
+      }
+      alertObj.commentHistory = [];
     }
 
     res.status(200).json({
@@ -1710,75 +1730,85 @@ export const editAlert = async (req, res) => {
       }
     }
 
-    // Threaded commentHistory handling
-    if (!Array.isArray(alert.commentHistory)) {
-      alert.commentHistory = [];
-    }
-    if (alert.commentHistory.length === 0 && alert.reason) {
-      const parsed = parseCommentThread(alert.reason, alert.clientName || 'Employee', 'employee', alert.createdAt || new Date());
-      alert.commentHistory = parsed.length > 0 ? parsed : [{
-        text: alert.reason.trim(),
-        authorName: alert.clientName || 'Employee',
-        authorRole: 'employee',
-        authorId: alert.assignedEmployeeId || alert.userId,
-        createdAt: alert.createdAt || new Date(),
-      }];
-    }
+    const hasClient = Boolean((alert.clientName || req.body.clientName || "").trim().length > 0 || alert.enquiryId);
 
-    const alertChanges = [];
-    const trimmedNewComment = (req.body.newComment || "").trim();
-    if (trimmedNewComment) {
-      alert.commentHistory.push({
-        text: trimmedNewComment,
-        authorName: editorName,
-        authorRole: editorRole,
-        authorId: userId,
-        createdAt: new Date(),
-      });
-      alert.reason = buildCommentThread(alert.commentHistory);
-      alertChanges.push(`New comment added: "${trimmedNewComment}"`);
-    } else if (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0) {
-      alert.commentHistory = req.body.commentHistory;
-      alert.reason = buildCommentThread(alert.commentHistory);
-      alertChanges.push(`Comment history updated`);
-    } else if (reason !== undefined && reason.trim() !== '') {
-      const cleanNew = reason.trim();
-      if (cleanNew.includes('---')) {
-        alert.reason = cleanNew;
-        alert.commentHistory = parseCommentThread(cleanNew, editorName, editorRole, new Date());
-        alertChanges.push(`Comment thread updated`);
-      } else {
-        const lastCommentText = alert.commentHistory.length > 0
-          ? (alert.commentHistory[alert.commentHistory.length - 1].text || '').trim()
-          : '';
-        if (cleanNew !== lastCommentText) {
-          alert.commentHistory.push({
-            text: cleanNew,
-            authorName: editorName,
-            authorRole: editorRole,
-            authorId: userId,
-            createdAt: new Date(),
-          });
-          alert.reason = buildCommentThread(alert.commentHistory);
-          alertChanges.push(`New comment added: "${cleanNew}"`);
+    if (hasClient) {
+      // Threaded commentHistory handling (Client reminders only)
+      if (!Array.isArray(alert.commentHistory)) {
+        alert.commentHistory = [];
+      }
+      if (alert.commentHistory.length === 0 && alert.reason) {
+        const parsed = parseCommentThread(alert.reason, alert.clientName || 'Employee', 'employee', alert.createdAt || new Date());
+        alert.commentHistory = parsed.length > 0 ? parsed : [{
+          text: alert.reason.trim(),
+          authorName: alert.clientName || 'Employee',
+          authorRole: 'employee',
+          authorId: alert.assignedEmployeeId || alert.userId,
+          createdAt: alert.createdAt || new Date(),
+        }];
+      }
+
+      const alertChanges = [];
+      const trimmedNewComment = (req.body.newComment || "").trim();
+      if (trimmedNewComment) {
+        alert.commentHistory.push({
+          text: trimmedNewComment,
+          authorName: editorName,
+          authorRole: editorRole,
+          authorId: userId,
+          createdAt: new Date(),
+        });
+        alert.reason = buildCommentThread(alert.commentHistory);
+        alertChanges.push(`New comment added: "${trimmedNewComment}"`);
+      } else if (Array.isArray(req.body.commentHistory) && req.body.commentHistory.length > 0) {
+        alert.commentHistory = req.body.commentHistory;
+        alert.reason = buildCommentThread(alert.commentHistory);
+        alertChanges.push(`Comment history updated`);
+      } else if (reason !== undefined && reason.trim() !== '') {
+        const cleanNew = reason.trim();
+        if (cleanNew.includes('---')) {
+          alert.reason = cleanNew;
+          alert.commentHistory = parseCommentThread(cleanNew, editorName, editorRole, new Date());
+          alertChanges.push(`Comment thread updated`);
+        } else {
+          const lastCommentText = alert.commentHistory.length > 0
+            ? (alert.commentHistory[alert.commentHistory.length - 1].text || '').trim()
+            : '';
+          if (cleanNew !== lastCommentText) {
+            alert.commentHistory.push({
+              text: cleanNew,
+              authorName: editorName,
+              authorRole: editorRole,
+              authorId: userId,
+              createdAt: new Date(),
+            });
+            alert.reason = buildCommentThread(alert.commentHistory);
+            alertChanges.push(`New comment added: "${cleanNew}"`);
+          }
         }
       }
-    }
 
-    if (alertChanges.length > 0) {
-      if (!Array.isArray(alert.editHistory)) alert.editHistory = [];
-      alert.editHistory.push({
-        changesSummary: alertChanges.join('; '),
-        details: alertChanges,
-        editedAt: new Date(),
-        editorName,
-        editorRole,
-        editedBy: userId,
-      });
-      alert.lastEditedByName = editorName;
-      alert.lastEditedByRole = editorRole;
-      alert.lastEditedAt = new Date();
-      alert.lastEditSummary = alertChanges.join('; ');
+      if (alertChanges.length > 0) {
+        if (!Array.isArray(alert.editHistory)) alert.editHistory = [];
+        alert.editHistory.push({
+          changesSummary: alertChanges.join('; '),
+          details: alertChanges,
+          editedAt: new Date(),
+          editorName,
+          editorRole,
+          editedBy: userId,
+        });
+        alert.lastEditedByName = editorName;
+        alert.lastEditedByRole = editorRole;
+        alert.lastEditedAt = new Date();
+        alert.lastEditSummary = alertChanges.join('; ');
+      }
+    } else {
+      // Personal reminder (no clientName): direct message update without comment/edit history
+      if (reason !== undefined && reason.trim() !== '') {
+        alert.reason = reason.trim();
+      }
+      alert.commentHistory = [];
     }
 
     if (repeatFrequency !== undefined) {
