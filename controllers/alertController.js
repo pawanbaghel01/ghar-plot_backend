@@ -446,6 +446,7 @@ export const createAlert = async (req, res) => {
       repeatDaily,
       isActive,
       category,
+      knowledgeCategory,
       repeatFrequency,
       repeatMetadata,
       fcmToken: bodyFcmToken,
@@ -575,6 +576,7 @@ export const createAlert = async (req, res) => {
       isActive: isActive !== undefined ? isActive : true,
       placeReminder: isPlaceReminder,
       category: category || "alert",
+      knowledgeCategory: (knowledgeCategory || "").trim(),
       repeatFrequency: finalRepeatFrequency,
       repeatMetadata: repeatMetadata || null,
       scheduledDateTime: calculatedScheduledDateTime,  // 🔥 Now properly set
@@ -1443,6 +1445,7 @@ export const editAlert = async (req, res) => {
       repeatDaily,
       isActive,
       category,
+      knowledgeCategory,
       repeatFrequency,
       repeatMetadata,
       fcmToken: bodyFcmToken,
@@ -1813,6 +1816,9 @@ export const editAlert = async (req, res) => {
 
     if (repeatFrequency !== undefined) {
       alert.repeatFrequency = repeatFrequency;
+    }
+    if (req.body.knowledgeCategory !== undefined) {
+      alert.knowledgeCategory = String(req.body.knowledgeCategory || "").trim();
     } else if (repeatDaily !== undefined) {
       alert.repeatFrequency = (repeatDaily === true || repeatDaily === 'true') ? 'daily' : 'none';
     }

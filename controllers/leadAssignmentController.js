@@ -89,10 +89,11 @@ export const assignLeadsToEmployee = async (req, res) => {
           continue;
         }
 
-        // Check if enquiry is already assigned to ANY employee (active, pending, or in-progress)
+        // Check if enquiry is already assigned to THIS specific employee (active, pending, or in-progress)
         const existingAssignment = await LeadAssignment.findOne({
           enquiryId,
           enquiryType,
+          employeeId,
           status: { $in: ['active', 'pending', 'in-progress'] }
         }).populate('employeeId', 'name email');
 
@@ -100,7 +101,7 @@ export const assignLeadsToEmployee = async (req, res) => {
           errors.push({
             enquiryId,
             enquiryType,
-            error: `Enquiry already assigned to ${existingAssignment.employeeId.name} (${existingAssignment.employeeId.email}). Please unassign first before reassigning.`
+            error: `Enquiry is already assigned to ${existingAssignment.employeeId?.name || 'this employee'}.`
           });
           continue;
         }
@@ -482,26 +483,38 @@ export const unassignLeads = async (req, res) => {
       });
     }
 
-    const { assignmentIds, enquiryIds } = req.body;
+    const { assignmentIds, enquiryIds, enquiryId, enquiryType, employeeId } = req.body;
     const adminId = req.user.id;
 
-    if (!assignmentIds && !enquiryIds) {
+    if (!assignmentIds && !enquiryIds && !enquiryId) {
       return res.status(400).json({
         success: false,
-        message: "Either assignmentIds or enquiryIds array is required"
+        message: "assignmentIds, enquiryIds, or enquiryId is required"
       });
     }
 
     let result;
-    if (assignmentIds && Array.isArray(assignmentIds)) {
-      // Unassign by assignment IDs
+    if (assignmentIds && Array.isArray(assignmentIds) && assignmentIds.length > 0) {
+      // Unassign by specific assignment IDs
       result = await LeadAssignment.deleteMany({
         _id: { $in: assignmentIds }
       });
-    } else if (enquiryIds && Array.isArray(enquiryIds)) {
-      // Unassign by enquiry IDs (for bulk operations)
-      result = await LeadAssignment.deleteMany({
-        enquiryId: { $in: enquiryIds }
+    } else if (enquiryId) {
+      // Unassign a single enquiry (optionally scoped to a specific employee and/or enquiryType)
+      const deleteFilter = { enquiryId };
+      if (enquiryType) deleteFilter.enquiryType = enquiryType;
+      if (employeeId) deleteFilter.employeeId = employeeId;
+      result = await LeadAssignment.deleteMany(deleteFilter);
+    } else if (enquiryIds && Array.isArray(enquiryIds) && enquiryIds.length > 0) {
+      // Unassign by enquiry IDs (optionally scoped to a specific employee and/or enquiryType)
+      const deleteFilter = { enquiryId: { $in: enquiryIds } };
+      if (enquiryType) deleteFilter.enquiryType = enquiryType;
+      if (employeeId) deleteFilter.employeeId = employeeId;
+      result = await LeadAssignment.deleteMany(deleteFilter);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Valid assignmentIds, enquiryIds, or enquiryId is required"
       });
     }
 

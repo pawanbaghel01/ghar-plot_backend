@@ -1,5 +1,51 @@
 import Reminder from "../models/reminderSchema.js";
 import Employee from "../models/employeeSchema.js";
+import Admin from "../models/adminAuthSchema.js";
+
+// Resolve creator details for reminders across both Employee and Admin collections
+const resolveReminderCreators = async (reminders) => {
+  const rawIds = [...new Set(
+    reminders
+      .map(r => (r.employeeId?._id || r.employeeId)?.toString())
+      .filter(Boolean)
+  )];
+
+  if (rawIds.length === 0) return {};
+
+  const employees = await Employee.find({ _id: { $in: rawIds } })
+    .select('name email phone department')
+    .lean();
+
+  const creatorMap = {};
+  employees.forEach(emp => {
+    creatorMap[emp._id.toString()] = {
+      _id: emp._id,
+      name: emp.name || 'Employee',
+      email: emp.email || '',
+      phone: emp.phone || '',
+      department: emp.department || '',
+    };
+  });
+
+  const missingIds = rawIds.filter(id => !creatorMap[id]);
+  if (missingIds.length > 0) {
+    const admins = await Admin.find({ _id: { $in: missingIds } })
+      .select('fullName email mobileNumber')
+      .lean();
+
+    admins.forEach(adm => {
+      creatorMap[adm._id.toString()] = {
+        _id: adm._id,
+        name: adm.fullName || 'Admin',
+        email: adm.email || '',
+        phone: adm.mobileNumber || '',
+        department: 'Admin',
+      };
+    });
+  }
+
+  return creatorMap;
+};
 
 // Get all reminders for a specific employee (Admin view)
 export const getEmployeeReminders = async (req, res) => {
@@ -536,20 +582,35 @@ export const getRemindersReport = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const reminders = await Reminder.find(filter)
-      .populate('employeeId', 'name email phone department')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
+
+    const creatorMap = await resolveReminderCreators(reminders);
+    reminders.forEach(reminder => {
+      const empIdStr = reminder.employeeId?.toString();
+      if (empIdStr && creatorMap[empIdStr]) {
+        reminder.employeeId = creatorMap[empIdStr];
+      } else {
+        reminder.employeeId = null;
+      }
+    });
 
     // Populate manualInquiryId if present for client profile link
-    for (const reminder of reminders) {
-      if (reminder.manualInquiryId) {
-        try {
-          await reminder.populate({
-            path: 'manualInquiryId',
-            select: 'clientName contactNumber location s_No ClientCode caseStatus source'
-          });
-        } catch (e) { /* ignore populate error */ }
+    const ManualInquiry = Reminder.db.models.ManualInquiry;
+    if (ManualInquiry) {
+      const inquiryIds = [...new Set(reminders.map(r => r.manualInquiryId?.toString()).filter(Boolean))];
+      if (inquiryIds.length > 0) {
+        const inquiries = await ManualInquiry.find({ _id: { $in: inquiryIds } })
+          .select('clientName contactNumber location s_No ClientCode caseStatus source')
+          .lean();
+        const inquiryMap = {};
+        inquiries.forEach(inq => { inquiryMap[inq._id.toString()] = inq; });
+        reminders.forEach(r => {
+          const inqId = r.manualInquiryId?.toString();
+          if (inqId && inquiryMap[inqId]) r.manualInquiryId = inquiryMap[inqId];
+        });
       }
     }
 
@@ -638,10 +699,17 @@ export const getDailyReminderSummary = async (req, res) => {
       reminderDateTime: { $gte: dayStart, $lte: dayEnd }
     };
     const dueReminders = await Reminder.find(dueFilter)
-      .populate('employeeId', 'name email department')
-      .sort({ reminderDateTime: 1 });
+      .sort({ reminderDateTime: 1 })
+      .lean();
 
     const dueCount = dueReminders.length;
+
+    // 4️⃣ Placed reminders — per employee
+    const placedReminders = await Reminder.find(placedFilter)
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const creatorMap = await resolveReminderCreators([...dueReminders, ...placedReminders]);
 
     // Status breakdown of due reminders
     const statusBreakdown = { completed: 0, pending: 0, snoozed: 0, dismissed: 0 };
@@ -654,8 +722,9 @@ export const getDailyReminderSummary = async (req, res) => {
     // 3️⃣ Employee-wise breakdown for DUE reminders
     const empMap = {};
     dueReminders.forEach(r => {
-      const emp = r.employeeId;
-      const empId = emp?._id?.toString() || 'unknown';
+      const rawEmpId = r.employeeId?.toString();
+      const emp = rawEmpId ? creatorMap[rawEmpId] : null;
+      const empId = emp?._id?.toString() || rawEmpId || 'unknown';
       if (!empMap[empId]) {
         empMap[empId] = {
           employeeId: empId,
@@ -680,15 +749,11 @@ export const getDailyReminderSummary = async (req, res) => {
       });
     });
 
-    // 4️⃣ Placed reminders — per employee
-    const placedReminders = await Reminder.find(placedFilter)
-      .populate('employeeId', 'name email department')
-      .sort({ createdAt: 1 });
-
     const placedEmpMap = {};
     placedReminders.forEach(r => {
-      const emp = r.employeeId;
-      const empId = emp?._id?.toString() || 'unknown';
+      const rawEmpId = r.employeeId?.toString();
+      const emp = rawEmpId ? creatorMap[rawEmpId] : null;
+      const empId = emp?._id?.toString() || rawEmpId || 'unknown';
       if (!placedEmpMap[empId]) {
         placedEmpMap[empId] = {
           employeeId: empId,

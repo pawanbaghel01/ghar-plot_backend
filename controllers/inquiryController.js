@@ -251,29 +251,31 @@ export const getEnquiries = async (req, res) => {
       .populate("propertyId")
       .sort({ createdAt: -1 });
 
-    //  Step 3: Add assignment information to each enquiry
+    //  Step 3: Add assignment information to each enquiry (supports multiple employees)
     const enquiriesWithAssignment = await Promise.all(
       enquiries.map(async (enquiry) => {
-        // Find active assignment for this enquiry
-        const assignment = await LeadAssignment.findOne({
+        const activeAssignments = await LeadAssignment.find({
           enquiryId: enquiry._id,
           enquiryType: 'Inquiry',
           status: { $in: ['active', 'pending', 'in-progress'] }
         }).populate('employeeId', 'name fullName email phone');
 
+        const mappedAssignments = activeAssignments.map((assignment) => ({
+          _id: assignment._id,
+          employeeId: assignment.employeeId?._id || assignment.employeeId,
+          employeeName: assignment.employeeId?.fullName || assignment.employeeId?.name || 'Assigned Employee',
+          employeeEmail: assignment.employeeId?.email || '',
+          employeePhone: assignment.employeeId?.phone || '',
+          status: assignment.status,
+          assignedDate: assignment.assignedDate,
+          priority: assignment.priority,
+          notes: assignment.notes || '',
+        }));
+
         return {
           ...enquiry.toObject(),
-          assignment: assignment ? {
-            _id: assignment._id,
-            employeeId: assignment.employeeId?._id || assignment.employeeId,
-            employeeName: assignment.employeeId?.fullName || assignment.employeeId?.name || 'Assigned Employee',
-            employeeEmail: assignment.employeeId?.email || '',
-            employeePhone: assignment.employeeId?.phone || '',
-            status: assignment.status,
-            assignedDate: assignment.assignedDate,
-            priority: assignment.priority,
-            notes: assignment.notes || '',
-          } : null
+          assignment: mappedAssignments[0] || null,
+          assignments: mappedAssignments,
         };
       })
     );
@@ -381,26 +383,33 @@ export const getAllManualInquiries = async (req, res) => {
   try {
     const inquiries = await ManualInquiry.find().sort({ createdAt: -1 });
 
-    // Add assignment information to each manual inquiry
+    // Add assignment information to each manual inquiry (supports multiple employees)
     const inquiriesWithAssignment = await Promise.all(
       inquiries.map(async (inquiry) => {
-        // Find active assignment for this manual inquiry
-        const assignment = await LeadAssignment.findOne({
+        const activeAssignments = await LeadAssignment.find({
           enquiryId: inquiry._id,
           enquiryType: 'ManualInquiry',
           status: { $in: ['active', 'pending', 'in-progress'] }
-        }).populate('employeeId', 'name email');
+        }).populate('employeeId', 'name fullName email phone');
+
+        const mappedAssignments = activeAssignments
+          .filter((a) => a.employeeId)
+          .map((assignment) => ({
+            _id: assignment._id,
+            employeeId: assignment.employeeId._id,
+            employeeName: assignment.employeeId.fullName || assignment.employeeId.name || 'Assigned Employee',
+            employeeEmail: assignment.employeeId.email || '',
+            employeePhone: assignment.employeeId.phone || '',
+            status: assignment.status,
+            assignedDate: assignment.assignedDate,
+            priority: assignment.priority,
+            notes: assignment.notes || '',
+          }));
 
         return {
           ...inquiry.toObject(),
-          assignment: assignment ? {
-            employeeId: assignment.employeeId._id,
-            employeeName: assignment.employeeId.name,
-            employeeEmail: assignment.employeeId.email,
-            status: assignment.status,
-            assignedDate: assignment.assignedDate,
-            priority: assignment.priority
-          } : null
+          assignment: mappedAssignments[0] || null,
+          assignments: mappedAssignments,
         };
       })
     );

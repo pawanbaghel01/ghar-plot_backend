@@ -104,8 +104,13 @@ const alertSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["alert", "reminder"],
+      enum: ["alert", "reminder", "knowledge_base"],
       default: "alert",
+    },
+    knowledgeCategory: {
+      type: String,
+      default: "",
+      trim: true,
     },
     repeatFrequency: {
       type: String,
