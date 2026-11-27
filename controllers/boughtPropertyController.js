@@ -77,12 +77,9 @@ export const getBoughtProperties = async (req, res) => {
 
     const getBoughtCount = await Buy.countDocuments();
 
-    if (!getBought.length) {
-      return res.status(404).json({ message: "No properties found" });
-    }
-
     res.status(200).json({
-      message: "Bought properties fetched successfully",
+      success: true,
+      message: getBought.length ? "Bought properties fetched successfully" : "No properties found",
       count: getBoughtCount,
       data: getBought,
     });
